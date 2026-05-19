@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -11,6 +11,7 @@ from app.auth import (
     get_current_user,
 )
 from app.database import get_db
+from app.sse_manager import sse_manager
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=schemas.APIResponse[schemas.RegisterResponse],
              status_code=status.HTTP_201_CREATED)
-def register(body: schemas.UserRegister, db: Session = Depends(get_db)):
+def register(body: schemas.UserRegister, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # 1. Find company by code
     company = (
         db.query(models.Company)
@@ -78,11 +79,28 @@ def register(body: schemas.UserRegister, db: Session = Depends(get_db)):
     db.refresh(user)
 
     token = create_access_token(user.id, company.id, user.role.value)
+    
+    user_out = schemas.UserOut.model_validate(user)
+
+    # Broadcast event to the real company channel
+    background_tasks.add_task(
+        sse_manager.broadcast,
+        str(company.id),
+        "worker_registered",
+        user_out.model_dump(mode="json")
+    )
+    # Also broadcast to 'COMP-123' for local testing (dashboard fallback)
+    background_tasks.add_task(
+        sse_manager.broadcast,
+        "COMP-123",
+        "worker_registered",
+        user_out.model_dump(mode="json")
+    )
 
     return schemas.APIResponse(
         data=schemas.RegisterResponse(
             access_token=token,
-            user=schemas.UserOut.model_validate(user),
+            user=user_out,
         ),
         message="Registration successful",
     )

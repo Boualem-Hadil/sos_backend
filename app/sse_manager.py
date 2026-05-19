@@ -48,8 +48,8 @@ class SSEManager:
         if not queues:
             return
 
-        payload = json.dumps(data, default=str)
-        message = f"event: {event_type}\ndata: {payload}\n\n"
+        payload = json.dumps({"type": event_type, "data": data}, default=str)
+        message = f"data: {payload}\n\n"
 
         dead: List[asyncio.Queue] = []
         for q in queues:
