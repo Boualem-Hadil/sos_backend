@@ -27,6 +27,7 @@ logger = logging.getLogger("sos_backend")
 from app.routes import auth, users, emergencies, companies, events, medical, admin
 from app.database import engine
 from app import models
+from app.scheduler import create_scheduler
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -35,7 +36,12 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 SOS Algérie backend starting up …")
     # Create all tables if they don't exist (dev convenience — use Alembic in prod)
     models.Base.metadata.create_all(bind=engine)
+    # Start license-expiry scheduler
+    scheduler = create_scheduler()
+    scheduler.start()
+    logger.info("⏰ License expiry scheduler started (runs daily at 08:00)")
     yield
+    scheduler.shutdown(wait=False)
     logger.info("🛑 SOS Algérie backend shutting down …")
 
 

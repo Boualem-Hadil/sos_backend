@@ -90,44 +90,73 @@ SAMPLE_EMERGENCIES = [
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def seed():
-    print("🌱 Creating all tables …")
+    print("[*] Creating all tables ...")
     models.Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
     try:
         # ── Super admin ───────────────────────────────────────────────────────
-        # We need a dummy company for the super admin
-        dummy_company = db.query(models.Company).filter_by(company_code="SYSADMIN-INTERNAL").first()
-        if not dummy_company:
-            dummy_company = models.Company(
-                name               = "SOS Algérie Platform",
-                industry           = "platform",
-                company_code       = "SYSADMIN-INTERNAL",
-                max_users          = 999,
-                subscription_start = date(2024, 1, 1),
-                subscription_end   = date(2099, 12, 31),
-                is_active          = True,
-            )
-            db.add(dummy_company)
-            db.flush()
+        # Platform company for the super admin
+        platform_company = db.query(models.Company).filter_by(company_code="SUPER-ADMIN").first()
+        if not platform_company:
+            # Also try old code for migration
+            platform_company = db.query(models.Company).filter_by(company_code="SYSADMIN-INTERNAL").first()
+            if platform_company:
+                platform_company.company_code = "SUPER-ADMIN"
+                platform_company.name = "SOS Algérie Platform"
+                db.flush()
+                print("  ✅ Migrated platform company code → SUPER-ADMIN")
+            else:
+                platform_company = models.Company(
+                    name               = "SOS Algérie Platform",
+                    industry           = "platform",
+                    company_code       = "SUPER-ADMIN",
+                    max_users          = 999,
+                    subscription_start = date(2024, 1, 1),
+                    subscription_end   = date(2099, 12, 31),
+                    is_active          = True,
+                )
+                db.add(platform_company)
+                db.flush()
+                print("  ✅ Platform company created (SUPER-ADMIN)")
 
-        existing_admin = db.query(models.User).filter_by(employee_id="admin").first()
-        if not existing_admin:
+        # Create / update super admin user
+        existing_admin = (
+            db.query(models.User)
+            .filter(models.User.employee_id == "superAdmin", models.User.company_id == platform_company.id)
+            .first()
+        )
+        # Also check old 'admin' employee_id and migrate
+        old_admin = (
+            db.query(models.User)
+            .filter(models.User.employee_id == "admin", models.User.company_id == platform_company.id)
+            .first()
+        )
+
+        if existing_admin:
+            print("  ⏭  super_admin already exists (superAdmin)")
+        elif old_admin:
+            # Migrate old admin to new credentials
+            old_admin.employee_id   = "superAdmin"
+            old_admin.password_hash = hash_password("turbocooling")
+            old_admin.full_name     = "Super Administrateur"
+            db.flush()
+            print("  ✅ Migrated super_admin to new credentials (superAdmin / turbocooling)")
+        else:
             admin = models.User(
-                company_id    = dummy_company.id,
+                company_id    = platform_company.id,
                 full_name     = "Super Administrateur",
-                employee_id   = "admin",
+                employee_id   = "superAdmin",
                 phone         = "+213550000000",
-                password_hash = hash_password("admin123"),
+                password_hash = hash_password("turbocooling"),
                 role          = models.UserRole.super_admin,
             )
             db.add(admin)
             db.flush()
             db.add(models.MedicalProfile(user_id=admin.id, chronic_diseases=[], allergies=[]))
-            dummy_company.current_users += 1
-            print("  ✅ super_admin created  (employee_id=admin  password=admin123)")
-        else:
-            print("  ⏭  super_admin already exists")
+            platform_company.current_users += 1
+            print("  ✅ super_admin created  (employee_id=superAdmin  password=turbocooling  company_code=SUPER-ADMIN)")
+
 
         # ── Companies + workers ───────────────────────────────────────────────
         company_objects = {}
@@ -214,11 +243,11 @@ def seed():
 
         db.commit()
         print("\n✅ Seeding complete!")
-        print("─" * 50)
+        print("─" * 60)
         print("  Login credentials:")
-        print("  super_admin → employee_id: admin     | password: admin123 | company_code: SYSADMIN-INTERNAL")
-        print("  workers     → employee_id: SON-001…  | password: worker123 | company_code: SONATRACH-2024")
-        print("  workers     → employee_id: COS-001…  | password: worker123 | company_code: COSIDER-2024")
+        print("  super_admin → employee_id: superAdmin  | password: turbocooling | company_code: SUPER-ADMIN")
+        print("  workers     → employee_id: SON-001…    | password: worker123    | company_code: SONATRACH-2024")
+        print("  workers     → employee_id: COS-001…    | password: worker123    | company_code: COSIDER-2024")
 
     except Exception as exc:
         db.rollback()

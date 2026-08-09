@@ -71,7 +71,7 @@ async def report_emergency(
     )
 
 
-# ─── Resolve Emergency ────────────────────────────────────────────────────────
+# ─── Resolve Emergency ───────────────────────────────────────────────────────────────
 
 @router.put("/{emergency_id}/resolve",
             response_model=schemas.APIResponse[schemas.EmergencyOut])
@@ -97,22 +97,26 @@ async def resolve_emergency(
     if emergency.status != models.EmergencyStatus.active:
         raise HTTPException(status_code=409, detail="Emergency is already resolved")
 
+    # ── Persist status + existing fields (UNCHANGED) ─────────────────────────
     emergency.status      = body.status
     emergency.resolved_at = datetime.now(timezone.utc)
-    if body.notes:
-        emergency.notes = body.notes
+
+    # ── NEW: persist resolution detail fields ──────────────────────────────
+    if body.responder_type is not None:
+        emergency.responder_type = body.responder_type       # NEW
+    if body.eta_minutes is not None:
+        emergency.eta_minutes = body.eta_minutes             # NEW
+    if body.resolution_notes:
+        emergency.notes = body.resolution_notes              # maps to existing 'notes' column
 
     db.commit()
     db.refresh(emergency)
 
-    # Broadcast SSE
+    # ── Broadcast SSE with FULL enriched payload (CHANGED: was thin {id, status}) ──
     await sse_manager.broadcast(
         company_id = str(emergency.company_id),
         event_type = "EMERGENCY_RESOLVED",
-        data       = {
-            "emergency_id": str(emergency.id),
-            "status":       emergency.status.value,
-        },
+        data       = _emergency_payload(emergency, db),    # CHANGED
     )
 
     return schemas.APIResponse(
@@ -129,12 +133,19 @@ def list_emergencies(
     limit:  int          = Query(20, ge=1, le=100),
     type:   str | None   = Query(None),
     status: str | None   = Query(None),
+    user_id: str | None  = Query(None),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(models.Emergency).filter(
         models.Emergency.company_id == current_user.company_id
     )
+
+    if user_id:
+        if user_id == "me":
+            query = query.filter(models.Emergency.user_id == current_user.id)
+        else:
+            query = query.filter(models.Emergency.user_id == user_id)
 
     if type:
         query = query.filter(models.Emergency.type == type)

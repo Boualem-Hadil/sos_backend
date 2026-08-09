@@ -23,9 +23,18 @@ class UserRole(str, enum.Enum):
 
 
 class EmergencyStatus(str, enum.Enum):
-    active      = "active"
-    resolved    = "resolved"
-    false_alarm = "false_alarm"
+    active             = "active"
+    resolved           = "resolved"
+    false_alarm        = "false_alarm"
+    cancelled_by_worker = "cancelled_by_worker"   # worker-initiated end, not officer resolution
+
+
+# NEW — responder type for officer resolution
+class ResponderType(str, enum.Enum):
+    police = "police"
+    samu   = "samu"
+    fire   = "fire"
+    other  = "other"
 
 
 # ─── Company ──────────────────────────────────────────────────────────────────
@@ -37,6 +46,7 @@ class Company(Base):
     name               = Column(String(255), nullable=False)
     industry           = Column(String(100), nullable=False)          # factory, oil, construction, mining
     company_code       = Column(String(100), unique=True, nullable=False)  # e.g. SONATRACH-2024
+    contact_email      = Column(String(255), nullable=True)           # for license expiry notifications
     max_users          = Column(Integer, nullable=False, default=50)
     current_users      = Column(Integer, nullable=False, default=0)
     subscription_start = Column(Date, nullable=True)
@@ -129,6 +139,9 @@ class Emergency(Base):
     started_at           = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     resolved_at          = Column(DateTime(timezone=True), nullable=True)
     notes                = Column(Text, nullable=True)
+    # ── Resolution fields (added for officer resolution flow) ──────────────
+    responder_type       = Column(SAEnum(ResponderType), nullable=True)   # NEW
+    eta_minutes          = Column(Integer, nullable=True)                  # NEW
 
     # Relationships
     user    = relationship("User",    back_populates="emergencies")
@@ -136,3 +149,18 @@ class Emergency(Base):
 
     def __repr__(self):
         return f"<Emergency {self.type} [{self.status}]>"
+
+
+# ─── Notification Recipients (configurable from admin panel) ──────────────────
+
+class NotificationRecipient(Base):
+    __tablename__ = "notification_recipients"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email      = Column(String(255), nullable=False, unique=True)
+    name       = Column(String(255), nullable=False)
+    is_active  = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<NotificationRecipient {self.email}>"

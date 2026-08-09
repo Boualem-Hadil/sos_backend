@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models import EmergencyStatus, UserRole
+from app.models import EmergencyStatus, UserRole, ResponderType  # CHANGED: added ResponderType
 
 T = TypeVar("T")
 
@@ -38,6 +38,7 @@ class CompanyBase(BaseModel):
     industry: str
     company_code: str
     max_users: int = 50
+    contact_email: Optional[str] = None
     subscription_start: Optional[date] = None
     subscription_end: Optional[date] = None
 
@@ -55,8 +56,10 @@ class CompanyUpdate(BaseModel):
     max_users: Optional[int] = None
     is_active: Optional[bool] = None
     subscription_end: Optional[date] = None
+    subscription_start: Optional[date] = None
     name: Optional[str] = None
     industry: Optional[str] = None
+    contact_email: Optional[str] = None
 
 
 class CompanyOut(BaseModel):
@@ -64,6 +67,7 @@ class CompanyOut(BaseModel):
     name: str
     industry: str
     company_code: str
+    contact_email: Optional[str]
     max_users: int
     current_users: int
     subscription_start: Optional[date]
@@ -199,8 +203,11 @@ class EmergencyCreate(BaseModel):
 
 
 class EmergencyResolve(BaseModel):
-    status: EmergencyStatus   # resolved | false_alarm
-    notes: Optional[str] = None
+    status: EmergencyStatus               # resolved | false_alarm | cancelled_by_worker
+    # ── NEW resolution fields ────────────────────────────────────────────────
+    responder_type:   Optional[ResponderType] = None   # NEW
+    eta_minutes:      Optional[int]           = None   # NEW
+    resolution_notes: Optional[str]           = None   # NEW (maps to DB 'notes' column)
 
 
 class EmergencyOut(BaseModel):
@@ -216,6 +223,9 @@ class EmergencyOut(BaseModel):
     started_at: datetime
     resolved_at: Optional[datetime]
     notes: Optional[str]
+    # ── NEW resolution fields ───────────────────────────────────────────────
+    responder_type: Optional[ResponderType] = None    # NEW
+    eta_minutes:    Optional[int]           = None    # NEW
 
     model_config = {"from_attributes": True}
 
@@ -242,9 +252,13 @@ class SSEEmergencyStarted(BaseModel):
     company: CompanyOut
 
 
+# CHANGED: SSEEmergencyResolved now carries the full enriched payload
+# (same shape as the EMERGENCY_STARTED broadcast, so clients share one parser)
 class SSEEmergencyResolved(BaseModel):
-    emergency_id: UUID
-    status: EmergencyStatus
+    emergency:       EmergencyOut
+    user:            Optional[UserOut]
+    medical_profile: Optional[MedicalProfileOut]
+    company:         Optional[CompanyOut]
 
 
 # ─── Admin Stats ──────────────────────────────────────────────────────────────
@@ -254,3 +268,32 @@ class AdminStats(BaseModel):
     total_users: int
     total_emergencies_today: int
     active_emergencies: int
+    expiring_soon: int = 0       # companies expiring within 30 days
+    expired: int = 0             # companies already expired
+
+
+# ─── Officer Creation ─────────────────────────────────────────────────────────
+
+class OfficerCreate(BaseModel):
+    full_name: str
+    employee_id: str
+    password: str = Field(min_length=6)
+    phone: Optional[str] = None
+    company_id: UUID
+
+
+# ─── Notification Recipients ──────────────────────────────────────────────────
+
+class NotificationRecipientCreate(BaseModel):
+    email: str
+    name: str
+
+
+class NotificationRecipientOut(BaseModel):
+    id: UUID
+    email: str
+    name: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
