@@ -1,5 +1,5 @@
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
@@ -212,3 +212,292 @@ def get_emergency(
         detail.medical_profile = schemas.MedicalProfileOut.model_validate(medical)
 
     return schemas.APIResponse(data=detail)
+
+
+# ─── Haversine helper ─────────────────────────────────────────────────────────
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Returns great-circle distance in kilometres between two points."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+# ─── GPS Heartbeat (worker → backend) ────────────────────────────────────────
+
+@router.post("/{emergency_id}/heartbeat",
+             response_model=schemas.APIResponse[schemas.EmergencyOut])
+async def gps_heartbeat(
+    emergency_id: str,
+    body: schemas.GpsHeartbeatIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Worker app sends GPS coordinates every ~30 s while the emergency is active.
+    Also updates last_seen_active as an interaction signal.
+    Only sent while the emergency is active — stops on resolve/cancel.
+    PRIVACY NOTE: location is shared only during an active emergency; no
+    background tracking. Full consent UI is a separate task.
+    """
+    emergency = (
+        db.query(models.Emergency)
+        .filter(models.Emergency.id == emergency_id)
+        .first()
+    )
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+
+    # Only the reporting worker (or super_admin) may send heartbeats for this emergency
+    if (str(emergency.user_id) != str(current_user.id)
+            and current_user.role != models.UserRole.super_admin):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if emergency.status != models.EmergencyStatus.active:
+        raise HTTPException(status_code=409, detail="Emergency is not active")
+
+    now = datetime.now(timezone.utc)
+    emergency.heartbeat_lat    = body.latitude
+    emergency.heartbeat_lng    = body.longitude
+    emergency.last_seen_active = now   # interaction signal
+    db.commit()
+    db.refresh(emergency)
+
+    # Broadcast a lightweight SSE so the dashboard can update the marker in real time
+    await sse_manager.broadcast(
+        company_id = str(emergency.company_id),
+        event_type = "HEARTBEAT_UPDATED",
+        data       = {
+            "emergency_id":  str(emergency.id),
+            "latitude":      body.latitude,
+            "longitude":     body.longitude,
+            "last_seen_active": now.isoformat(),
+            "not_responding": schemas.EmergencyOut.model_validate(emergency).not_responding,
+        },
+    )
+
+    return schemas.APIResponse(
+        data    = schemas.EmergencyOut.model_validate(emergency),
+        message = "Heartbeat recorded",
+    )
+
+
+# ─── "Are You OK?" Ping (officer → worker via backend/SSE) ───────────────────
+
+@router.post("/{emergency_id}/ping",
+             response_model=schemas.APIResponse[schemas.EmergencyOut])
+async def send_ping(
+    emergency_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Officer triggers an 'are you OK?' ping.  The worker app receives a PING_SENT
+    SSE event and must respond within PING_RESPONSE_WINDOW_SECONDS (60 s).
+    After the window, if ping_acked_at is still null, the emergency is flagged
+    not_responding (derived field — no separate DB column needed).
+    """
+    emergency = (
+        db.query(models.Emergency)
+        .filter(models.Emergency.id == emergency_id)
+        .first()
+    )
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+
+    if (str(emergency.company_id) != str(current_user.company_id)
+            and current_user.role != models.UserRole.super_admin):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if emergency.status != models.EmergencyStatus.active:
+        raise HTTPException(status_code=409, detail="Emergency is not active")
+
+    # Reset previous ack so the new window starts fresh
+    emergency.ping_sent_at  = datetime.now(timezone.utc)
+    emergency.ping_acked_at = None
+    db.commit()
+    db.refresh(emergency)
+
+    # Broadcast to the company channel — the worker app listens on the same SSE stream
+    await sse_manager.broadcast(
+        company_id = str(emergency.company_id),
+        event_type = "PING_SENT",
+        data       = {
+            "emergency_id": str(emergency.id),
+            "ping_sent_at": emergency.ping_sent_at.isoformat(),
+            "window_seconds": schemas.PING_RESPONSE_WINDOW_SECONDS,
+        },
+    )
+
+    return schemas.APIResponse(
+        data    = schemas.EmergencyOut.model_validate(emergency),
+        message = "Ping sent",
+    )
+
+
+# ─── Ping Acknowledgment (worker → backend) ───────────────────────────────────
+
+@router.post("/{emergency_id}/ping-ack",
+             response_model=schemas.APIResponse[schemas.EmergencyOut])
+async def ack_ping(
+    emergency_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Worker taps 'I am OK' within the response window.
+    Sets ping_acked_at, clears not_responding flag (derived), and notifies dashboard.
+    """
+    emergency = (
+        db.query(models.Emergency)
+        .filter(models.Emergency.id == emergency_id)
+        .first()
+    )
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+
+    if (str(emergency.user_id) != str(current_user.id)
+            and current_user.role != models.UserRole.super_admin):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if emergency.ping_sent_at is None:
+        raise HTTPException(status_code=409, detail="No pending ping to acknowledge")
+
+    now = datetime.now(timezone.utc)
+    sent = emergency.ping_sent_at
+    if sent.tzinfo is None:
+        sent = sent.replace(tzinfo=timezone.utc)
+    if (now - sent).total_seconds() > schemas.PING_RESPONSE_WINDOW_SECONDS:
+        raise HTTPException(status_code=410, detail="Ping window has expired")
+
+    emergency.ping_acked_at    = now
+    emergency.last_seen_active = now  # also counts as interaction
+    db.commit()
+    db.refresh(emergency)
+
+    await sse_manager.broadcast(
+        company_id = str(emergency.company_id),
+        event_type = "PING_ACKED",
+        data       = {
+            "emergency_id":  str(emergency.id),
+            "ping_acked_at": now.isoformat(),
+            "not_responding": False,
+        },
+    )
+
+    return schemas.APIResponse(
+        data    = schemas.EmergencyOut.model_validate(emergency),
+        message = "Ping acknowledged",
+    )
+
+
+# ─── Nearby Workers (officer → dashboard) ────────────────────────────────────
+
+@router.get("/{emergency_id}/nearby-workers",
+            response_model=schemas.APIResponse[list[schemas.NearbyWorkerOut]])
+def get_nearby_workers(
+    emergency_id: str,
+    radius_km: float = Query(0.5, ge=0.1, le=50.0,
+                             description="Search radius in kilometres"),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns same-company workers matched by operational unit and/or GPS proximity.
+    Unit matches bypass distance checks. GPS matches require a heartbeat within the last 10 minutes.
+    """
+    emergency = (
+        db.query(models.Emergency)
+        .filter(models.Emergency.id == emergency_id)
+        .first()
+    )
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+
+    if (str(emergency.company_id) != str(current_user.company_id)
+            and current_user.role != models.UserRole.super_admin):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Use the latest heartbeat position; fall back to initial report position
+    origin_lat = emergency.heartbeat_lat or emergency.latitude
+    origin_lng = emergency.heartbeat_lng or emergency.longitude
+
+    # GPS calculation will just be skipped if origin is None.
+    victim = None
+    if emergency.user_id:
+        victim = db.query(models.User).filter(models.User.id == emergency.user_id).first()
+    victim_unit = victim.unit if victim else None
+
+    # Get all other workers in the company
+    other_workers = (
+        db.query(models.User)
+        .filter(
+            models.User.company_id == emergency.company_id,
+            models.User.id != emergency.user_id
+        )
+        .all()
+    )
+
+    now = datetime.now(timezone.utc)
+    freshness_threshold = now - timedelta(minutes=10)
+    results: list[schemas.NearbyWorkerOut] = []
+
+    for worker in other_workers:
+        is_unit_match = bool(victim_unit and worker.unit and worker.unit == victim_unit)
+        is_gps_match = False
+        distance = None
+
+        if worker.location_updated_at and worker.location_updated_at >= freshness_threshold:
+            if worker.latitude is not None and worker.longitude is not None and origin_lat is not None and origin_lng is not None:
+                dist = _haversine_km(
+                    origin_lat, origin_lng,
+                    worker.latitude, worker.longitude,
+                )
+                if dist <= radius_km:
+                    is_gps_match = True
+                    distance = dist
+        
+        if is_unit_match and is_gps_match:
+            match_type = "both"
+        elif is_gps_match:
+            match_type = "gps"
+        elif is_unit_match:
+            match_type = "unit"
+        else:
+            continue
+
+        results.append(schemas.NearbyWorkerOut(
+            id           = worker.id,
+            full_name    = worker.full_name,
+            phone        = worker.phone,
+            match_type   = match_type,
+            distance_km  = round(distance, 3) if distance is not None else None,
+            latitude     = worker.latitude if is_gps_match else None,
+            longitude    = worker.longitude if is_gps_match else None,
+        ))
+
+    # Sort: GPS-matched workers first (ordered by distance), then unit-only matches.
+    results.sort(key=lambda w: (
+        0 if w.match_type in ("gps", "both") else 1,
+        w.distance_km if w.distance_km is not None else float('inf')
+    ))
+
+    # Fallback: if no workers found via GPS or Unit, return up to 5 random/available workers
+    if not results and other_workers:
+        for worker in other_workers[:5]:
+            results.append(schemas.NearbyWorkerOut(
+                id           = worker.id,
+                full_name    = worker.full_name,
+                phone        = worker.phone,
+                match_type   = "company",
+                distance_km  = None,
+                latitude     = None,
+                longitude    = None,
+            ))
+
+    return schemas.APIResponse(
+        data    = results,
+        message = f"{len(results)} worker(s) found",
+    )

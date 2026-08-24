@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from typing import Any, Generic, List, Optional, TypeVar
 from uuid import UUID
 
@@ -114,6 +114,7 @@ class UserBase(BaseModel):
     full_name: str
     employee_id: str
     phone: Optional[str] = None
+    unit: Optional[str] = None
 
 
 class UserRegister(UserBase):
@@ -210,6 +211,42 @@ class EmergencyResolve(BaseModel):
     resolution_notes: Optional[str]           = None   # NEW (maps to DB 'notes' column)
 
 
+# ── Heartbeat & Ping schemas ─────────────────────────────────────────────────
+
+class GpsHeartbeatIn(BaseModel):
+    """Sent by the worker app every 30 s while an emergency is active."""
+    latitude:  float
+    longitude: float
+
+
+class UserHeartbeat(BaseModel):
+    """Sent by the worker app to update their general location during any company emergency."""
+    latitude:  float
+    longitude: float
+
+
+class PingAckIn(BaseModel):
+    """Sent by the worker app when the user taps 'I am OK' within the ping window."""
+    pass  # emergency_id comes from the URL path parameter
+
+
+class NearbyWorkerOut(BaseModel):
+    """A worker that has GPS heartbeat data within the search radius or shares the same unit."""
+    id:           UUID
+    full_name:    str
+    phone:        Optional[str]
+    match_type:   str  # "gps" | "unit" | "both"
+    distance_km:  Optional[float] = None
+    latitude:     Optional[float] = None
+    longitude:    Optional[float] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Ping response window (seconds) ───────────────────────────────────────────
+PING_RESPONSE_WINDOW_SECONDS = 60
+
+
 class EmergencyOut(BaseModel):
     id: UUID
     user_id: Optional[UUID]
@@ -223,11 +260,36 @@ class EmergencyOut(BaseModel):
     started_at: datetime
     resolved_at: Optional[datetime]
     notes: Optional[str]
-    # ── NEW resolution fields ───────────────────────────────────────────────
-    responder_type: Optional[ResponderType] = None    # NEW
-    eta_minutes:    Optional[int]           = None    # NEW
+    # ── Resolution fields ───────────────────────────────────────────────────
+    responder_type: Optional[ResponderType] = None
+    eta_minutes:    Optional[int]           = None
+    # ── Nearby-workers feature fields ───────────────────────────────────────
+    last_seen_active: Optional[datetime]    = None   # NEW
+    ping_sent_at:     Optional[datetime]    = None   # NEW
+    ping_acked_at:    Optional[datetime]    = None   # NEW
+    heartbeat_lat:    Optional[float]       = None   # NEW
+    heartbeat_lng:    Optional[float]       = None   # NEW
+    # Computed: True when ping was sent, not acked, and window has expired
+    not_responding:   bool                  = False  # NEW (derived)
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def model_validate(cls, obj, *args, **kwargs):
+        instance = super().model_validate(obj, *args, **kwargs)
+        # Derive not_responding: ping sent + no ack + window expired
+        if (
+            instance.ping_sent_at is not None
+            and instance.ping_acked_at is None
+            and instance.status == EmergencyStatus.active
+        ):
+            now = datetime.now(timezone.utc)
+            sent = instance.ping_sent_at
+            if sent.tzinfo is None:
+                sent = sent.replace(tzinfo=timezone.utc)
+            if (now - sent).total_seconds() > PING_RESPONSE_WINDOW_SECONDS:
+                instance.not_responding = True
+        return instance
 
 
 class EmergencyDetail(EmergencyOut):

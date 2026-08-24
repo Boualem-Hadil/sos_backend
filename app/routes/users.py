@@ -95,3 +95,21 @@ def update_last_seen(
         data=schemas.UserLastSeen(last_seen=now),
         message="Last seen updated",
     )
+
+
+# ─── Update location heartbeat ────────────────────────────────────────────────
+
+@router.put("/heartbeat", response_model=schemas.APIResponse)
+def update_location_heartbeat(
+    body: schemas.UserHeartbeat,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.latitude = body.latitude
+    current_user.longitude = body.longitude
+    current_user.location_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return schemas.APIResponse(
+        success=True,
+        message="Worker location heartbeat updated"
+    )

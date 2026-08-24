@@ -59,6 +59,7 @@ def register(body: schemas.UserRegister, background_tasks: BackgroundTasks, db: 
         full_name     = body.full_name,
         employee_id   = body.employee_id,
         phone         = body.phone,
+        unit          = body.unit,  
         password_hash = hash_password(body.password),
         role          = models.UserRole.worker,
     )

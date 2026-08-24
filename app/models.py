@@ -77,6 +77,10 @@ class User(Base):
     is_active     = Column(Boolean, nullable=False, default=True)
     last_seen     = Column(DateTime(timezone=True), nullable=True)
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    latitude      = Column(Float, nullable=True)
+    longitude     = Column(Float, nullable=True)
+    location_updated_at = Column(DateTime(timezone=True), nullable=True)
+    unit          = Column(String(100), nullable=True)
 
     # employee_id must be unique per company
     __table_args__ = (
@@ -142,6 +146,17 @@ class Emergency(Base):
     # ── Resolution fields (added for officer resolution flow) ──────────────
     responder_type       = Column(SAEnum(ResponderType), nullable=True)   # NEW
     eta_minutes          = Column(Integer, nullable=True)                  # NEW
+
+    # ── Worker-activity & ping tracking (added for nearby-workers feature) ─
+    last_seen_active     = Column(DateTime(timezone=True), nullable=True)  # NEW: updated on any worker action during emergency
+    ping_sent_at         = Column(DateTime(timezone=True), nullable=True)  # NEW: when officer last sent "are you OK?" ping
+    ping_acked_at        = Column(DateTime(timezone=True), nullable=True)  # NEW: when worker acknowledged the ping
+
+    # ── Conditional GPS heartbeat (last reported position during emergency) ─
+    # NOTE: latitude/longitude columns already exist (initial report position).
+    # heartbeat_lat/lng track the *latest* live position while emergency is active.
+    heartbeat_lat        = Column(Float, nullable=True)                    # NEW
+    heartbeat_lng        = Column(Float, nullable=True)                    # NEW
 
     # Relationships
     user    = relationship("User",    back_populates="emergencies")
