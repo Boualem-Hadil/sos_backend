@@ -58,11 +58,38 @@ async def report_emergency(
     db.commit()
     db.refresh(emergency)
 
-    # Broadcast SSE
+    # ── Duplicate proximity check ─────────────────────────────────────────────
+    # Look for other active emergencies in the same company started within the
+    # last 2 minutes and within ~100 m of the new one.
+    possible_duplicate_ids: list[str] = []
+    if body.latitude is not None and body.longitude is not None:
+        two_min_ago = datetime.now(timezone.utc) - timedelta(minutes=2)
+        other_active = (
+            db.query(models.Emergency)
+            .filter(
+                models.Emergency.company_id == current_user.company_id,
+                models.Emergency.status     == models.EmergencyStatus.active,
+                models.Emergency.id         != emergency.id,
+                models.Emergency.started_at >= two_min_ago,
+            )
+            .all()
+        )
+        for other in other_active:
+            if other.latitude is not None and other.longitude is not None:
+                dist_km = _haversine_km(
+                    body.latitude, body.longitude,
+                    other.latitude, other.longitude,
+                )
+                if dist_km <= 0.05:   # 50 m
+                    possible_duplicate_ids.append(str(other.id))
+
+    # Broadcast SSE (possible_duplicate_of is additive — empty list if none)
+    sse_payload = _emergency_payload(emergency, db)
+    sse_payload["possible_duplicate_of"] = possible_duplicate_ids
     await sse_manager.broadcast(
         company_id = str(current_user.company_id),
         event_type = "EMERGENCY_STARTED",
-        data       = _emergency_payload(emergency, db),
+        data       = sse_payload,
     )
 
     return schemas.APIResponse(
@@ -130,7 +157,7 @@ async def resolve_emergency(
 @router.get("", response_model=schemas.APIResponse[schemas.EmergencyPage])
 def list_emergencies(
     page:   int          = Query(1, ge=1),
-    limit:  int          = Query(20, ge=1, le=100),
+    limit:  int          = Query(20, ge=1, le=500),
     type:   str | None   = Query(None),
     status: str | None   = Query(None),
     user_id: str | None  = Query(None),
