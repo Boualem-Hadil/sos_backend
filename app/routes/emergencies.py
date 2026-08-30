@@ -9,6 +9,7 @@ from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
 from app.sse_manager import sse_manager
+from app.services.firebase_service import send_push_notification
 
 router = APIRouter(prefix="/emergencies", tags=["Emergencies"])
 
@@ -83,17 +84,69 @@ async def report_emergency(
                 if dist_km <= 0.05:   # 50 m
                     possible_duplicate_ids.append(str(other.id))
 
-    # Broadcast SSE (possible_duplicate_of is additive — empty list if none)
+    # 1. Determine fallback 2 phone (if no one is on duty)
+    company = db.query(models.Company).filter(models.Company.id == current_user.company_id).first()
+    primary_officer_phone = company.sos_hotline_phone if company else None
+
+    # 2. Get all officers in the company
+    officers = db.query(models.User).filter(
+        models.User.company_id == current_user.company_id,
+        models.User.role.in_([models.UserRole.safety_officer, models.UserRole.company_admin]),
+        models.User.is_active == True
+    ).order_by(models.User.created_at.asc()).all()
+
+    # 3. Determine the primary target officer for the Native Dialer
+    # Priority: Assigned and on duty -> Any on duty
+    if current_user.assigned_officer_id:
+        assigned = next((o for o in officers if str(o.id) == str(current_user.assigned_officer_id) and o.is_on_duty), None)
+        if assigned and assigned.phone:
+            primary_officer_phone = assigned.phone
+
+    if not primary_officer_phone:
+        # Fallback 1: First available on-duty officer
+        on_duty_officer = next((o for o in officers if o.is_on_duty and o.phone), None)
+        if on_duty_officer:
+            primary_officer_phone = on_duty_officer.phone
+
+    # 4. Trigger Push Notifications to all active officers in the company
+    officer_ids = [o.id for o in officers]
+    if officer_ids:
+        tokens = db.query(models.FCMToken.token).filter(models.FCMToken.user_id.in_(officer_ids)).all()
+        token_list = [t[0] for t in tokens]
+        if token_list:
+            send_push_notification(
+                tokens=token_list,
+                title="🚨 Emergency Triggered!",
+                body=f"An emergency ({body.type}) was reported by {current_user.full_name}.",
+                data={"emergency_id": str(emergency.id)}
+            )
+
+    # 5. Auto-generate System Message
+    sys_msg = models.Message(
+        emergency_id=emergency.id,
+        sender_id=None,
+        message_type=models.MessageType.system,
+        content=f"Emergency triggered at location: {body.location_description or 'Unknown location'} (Lat: {body.latitude}, Lng: {body.longitude})"
+    )
+    db.add(sys_msg)
+    db.commit()
+
+    # Broadcast SSE
     sse_payload = _emergency_payload(emergency, db)
-    sse_payload["possible_duplicate_of"] = possible_duplicate_ids
+    sse_payload['possible_duplicate_of'] = possible_duplicate_ids
+    sse_payload['emergency']['primary_officer_phone'] = primary_officer_phone
+
     await sse_manager.broadcast(
         company_id = str(current_user.company_id),
         event_type = "EMERGENCY_STARTED",
         data       = sse_payload,
     )
 
+    emergency_out = schemas.EmergencyOut.model_validate(emergency)
+    emergency_out.primary_officer_phone = primary_officer_phone
+
     return schemas.APIResponse(
-        data    = schemas.EmergencyOut.model_validate(emergency),
+        data    = emergency_out,
         message = "Emergency reported",
     )
 

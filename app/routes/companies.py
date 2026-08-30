@@ -43,3 +43,29 @@ def get_company(
     stats.total_emergencies  = total_emergencies
 
     return schemas.APIResponse(data=stats)
+
+@router.put("/{company_id}", response_model=schemas.APIResponse[schemas.CompanyOut])
+def update_company(
+    company_id: str,
+    body: schemas.CompanyUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Only company admin can update their own company
+    if str(current_user.company_id) != company_id or current_user.role != models.UserRole.company_admin:
+        if current_user.role != models.UserRole.super_admin:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(company, field, value)
+
+    db.commit()
+    db.refresh(company)
+    return schemas.APIResponse(
+        data    = schemas.CompanyOut.model_validate(company),
+        message = "Company updated",
+    )

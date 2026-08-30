@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models import EmergencyStatus, UserRole, ResponderType  # CHANGED: added ResponderType
+from app.models import EmergencyStatus, UserRole, ResponderType, MessageType
 
 T = TypeVar("T")
 
@@ -60,6 +60,7 @@ class CompanyUpdate(BaseModel):
     name: Optional[str] = None
     industry: Optional[str] = None
     contact_email: Optional[str] = None
+    sos_hotline_phone: Optional[str] = None
 
 
 class CompanyOut(BaseModel):
@@ -70,6 +71,7 @@ class CompanyOut(BaseModel):
     contact_email: Optional[str]
     max_users: int
     current_users: int
+    sos_hotline_phone: Optional[str]
     subscription_start: Optional[date]
     subscription_end: Optional[date]
     is_active: bool
@@ -115,6 +117,23 @@ class UserBase(BaseModel):
     employee_id: str
     phone: Optional[str] = None
     unit: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+
+class WorkerCreate(UserBase):
+    password: str = Field(min_length=6)
+    role: UserRole = UserRole.worker
+    assigned_officer_id: Optional[UUID] = None
+
+class WorkerUpdate(BaseModel):
+    full_name: Optional[str] = None
+    employee_id: Optional[str] = None
+    phone: Optional[str] = None
+    unit: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    role: Optional[UserRole] = None
+    assigned_officer_id: Optional[UUID] = None
 
 
 class UserRegister(UserBase):
@@ -143,9 +162,14 @@ class UserOut(UserBase):
     company_id: UUID
     role: UserRole
     is_active: bool
+    is_on_duty: bool
+    assigned_officer_id: Optional[UUID] = None
     last_seen: Optional[datetime]
     created_at: datetime
     medical_profile: Optional[MedicalProfileOut] = None
+    # Live location — nullable until the worker's app sends its first fix
+    last_lat: Optional[float] = None
+    last_lng: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -170,6 +194,24 @@ class RegisterResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+# ─── Location ──────────────────────────────────────────────────────────────────────────
+
+class LocationUpdate(BaseModel):
+    """Body sent by the worker app every ~15 s to report live GPS position."""
+    latitude: float
+    longitude: float
+
+
+class SSEWorkerLocationPayload(BaseModel):
+    """Shape broadcast to dashboard clients on WORKER_LOCATION_UPDATED."""
+    user_id:     str
+    lat:         float
+    lng:         float
+    status:      str    # "active" | "emergency"
+    full_name:   str
+    employee_id: str
 
 
 # ─── Emergency ────────────────────────────────────────────────────────────────
@@ -263,6 +305,7 @@ class EmergencyOut(BaseModel):
     # ── Resolution fields ───────────────────────────────────────────────────
     responder_type: Optional[ResponderType] = None
     eta_minutes:    Optional[int]           = None
+    
     # ── Nearby-workers feature fields ───────────────────────────────────────
     last_seen_active: Optional[datetime]    = None   # NEW
     ping_sent_at:     Optional[datetime]    = None   # NEW
@@ -271,6 +314,9 @@ class EmergencyOut(BaseModel):
     heartbeat_lng:    Optional[float]       = None   # NEW
     # Computed: True when ping was sent, not acked, and window has expired
     not_responding:   bool                  = False  # NEW (derived)
+    
+    # ── Dialer Fallback ─────────────────────────────────────────────────────
+    primary_officer_phone: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -356,6 +402,35 @@ class NotificationRecipientOut(BaseModel):
     email: str
     name: str
     is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+# ─── FCM & Duty ───────────────────────────────────────────────────────────────
+
+class DutyUpdate(BaseModel):
+    is_on_duty: bool
+
+class FCMTokenRegister(BaseModel):
+    token: str
+    device_info: Optional[str] = None
+
+
+# ─── Chat ─────────────────────────────────────────────────────────────────────
+
+class MessageCreateText(BaseModel):
+    content: str
+    sender_role: Optional[str] = "worker"
+
+class MessageOut(BaseModel):
+    id: UUID
+    emergency_id: UUID
+    sender_id: Optional[UUID]
+    sender_role: str = "worker"
+    message_type: MessageType
+    content: Optional[str]
+    file_url: Optional[str]
+    duration_seconds: Optional[int]
     created_at: datetime
 
     model_config = {"from_attributes": True}

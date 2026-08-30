@@ -37,6 +37,12 @@ class ResponderType(str, enum.Enum):
     other  = "other"
 
 
+class MessageType(str, enum.Enum):
+    text = "text"
+    voice = "voice"
+    system = "system"
+
+
 # ─── Company ──────────────────────────────────────────────────────────────────
 
 class Company(Base):
@@ -49,6 +55,7 @@ class Company(Base):
     contact_email      = Column(String(255), nullable=True)           # for license expiry notifications
     max_users          = Column(Integer, nullable=False, default=50)
     current_users      = Column(Integer, nullable=False, default=0)
+    sos_hotline_phone  = Column(String(30), nullable=True)
     subscription_start = Column(Date, nullable=True)
     subscription_end   = Column(Date, nullable=True)
     is_active          = Column(Boolean, nullable=False, default=True)
@@ -75,7 +82,19 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role          = Column(SAEnum(UserRole), nullable=False, default=UserRole.worker)
     is_active     = Column(Boolean, nullable=False, default=True)
+    is_on_duty    = Column(Boolean, nullable=False, default=False)
+    assigned_officer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
     last_seen     = Column(DateTime(timezone=True), nullable=True)
+    # Live location — updated by worker app every ~15 s while foregrounded
+    last_lat      = Column(Float, nullable=True)
+    last_lng      = Column(Float, nullable=True)
+    
+    # Extra profile fields
+    unit          = Column(String(100), nullable=True)
+    department    = Column(String(100), nullable=True)
+    position      = Column(String(100), nullable=True)
+
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     latitude      = Column(Float, nullable=True)
     longitude     = Column(Float, nullable=True)
@@ -179,3 +198,37 @@ class NotificationRecipient(Base):
 
     def __repr__(self):
         return f"<NotificationRecipient {self.email}>"
+
+
+# ─── FCM Token ────────────────────────────────────────────────────────────────
+
+class FCMToken(Base):
+    __tablename__ = "fcm_tokens"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id      = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token        = Column(String(500), unique=True, nullable=False)
+    device_info  = Column(String(255), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_used_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+
+
+# ─── Message ──────────────────────────────────────────────────────────────────
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    emergency_id     = Column(UUID(as_uuid=True), ForeignKey("emergencies.id", ondelete="CASCADE"), nullable=False)
+    sender_id        = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sender_role      = Column(String(50), nullable=False, default="worker")
+    message_type     = Column(SAEnum(MessageType), nullable=False, default=MessageType.text)
+    content          = Column(Text, nullable=True)
+    file_url         = Column(String(500), nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    emergency = relationship("Emergency")
+    sender    = relationship("User")
