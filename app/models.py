@@ -82,7 +82,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role          = Column(SAEnum(UserRole), nullable=False, default=UserRole.worker)
     is_active     = Column(Boolean, nullable=False, default=True)
-    is_on_duty    = Column(Boolean, nullable=False, default=False)
     assigned_officer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     last_seen     = Column(DateTime(timezone=True), nullable=True)

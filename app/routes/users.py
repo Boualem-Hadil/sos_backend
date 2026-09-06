@@ -312,21 +312,7 @@ async def update_location(
     return schemas.APIResponse(data=payload, message="Location updated")
 
 
-# ─── FCM & Duty ───────────────────────────────────────────────────────────────
-
-@router.put("/duty", response_model=schemas.APIResponse[schemas.UserOut])
-def update_duty(
-    body: schemas.DutyUpdate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    current_user.is_on_duty = body.is_on_duty
-    db.commit()
-    db.refresh(current_user)
-    return schemas.APIResponse(
-        data=schemas.UserOut.model_validate(current_user),
-        message=f"Duty status updated to {body.is_on_duty}"
-    )
+# ─── FCM ──────────────────────────────────────────────────────────────────────
 
 @router.post("/fcm-tokens", response_model=schemas.APIResponse[None])
 def register_fcm_token(

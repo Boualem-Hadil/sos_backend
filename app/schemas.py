@@ -162,7 +162,6 @@ class UserOut(UserBase):
     company_id: UUID
     role: UserRole
     is_active: bool
-    is_on_duty: bool
     assigned_officer_id: Optional[UUID] = None
     last_seen: Optional[datetime]
     created_at: datetime
@@ -408,10 +407,7 @@ class NotificationRecipientOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-# ─── FCM & Duty ───────────────────────────────────────────────────────────────
-
-class DutyUpdate(BaseModel):
-    is_on_duty: bool
+# ─── FCM ──────────────────────────────────────────────────────────────────────
 
 class FCMTokenRegister(BaseModel):
     token: str
