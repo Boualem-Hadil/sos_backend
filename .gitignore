@@ -22,3 +22,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# User uploads
+app/uploads/

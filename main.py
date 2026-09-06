@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger("sos_backend")
 
 # ── Import routes (after env is loaded) ──────────────────────────────────────
-from app.routes import auth, users, emergencies, companies, events, medical, admin
+from app.routes import auth, users, emergencies, companies, events, medical, admin, messages
 from app.database import engine
 from app import models
 from app.scheduler import create_scheduler
@@ -108,6 +108,7 @@ app.include_router(companies.router)
 app.include_router(events.router)
 app.include_router(medical.router)
 app.include_router(admin.router)
+app.include_router(messages.router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
