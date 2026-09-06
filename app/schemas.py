@@ -187,6 +187,7 @@ class EmergencyCreate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_description: Optional[str] = None
+    voice_transcript: Optional[str] = None 
 
     @field_validator("type")
     @classmethod
@@ -260,6 +261,7 @@ class EmergencyOut(BaseModel):
     started_at: datetime
     resolved_at: Optional[datetime]
     notes: Optional[str]
+    voice_transcript: Optional[str] = None  # NEW
     # ── Resolution fields ───────────────────────────────────────────────────
     responder_type: Optional[ResponderType] = None
     eta_minutes:    Optional[int]           = None

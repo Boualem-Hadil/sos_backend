@@ -1,5 +1,5 @@
 """
-seed.py — Populate the database with realistic test data for SOS Algérie.
+seed.py — Populate the database with realistic test data for EchoAlert.
 
 Run with:  python seed.py
 """
@@ -103,12 +103,12 @@ def seed():
             platform_company = db.query(models.Company).filter_by(company_code="SYSADMIN-INTERNAL").first()
             if platform_company:
                 platform_company.company_code = "SUPER-ADMIN"
-                platform_company.name = "SOS Algérie Platform"
+                platform_company.name = "EchoAlert Platform"
                 db.flush()
                 print("  ✅ Migrated platform company code → SUPER-ADMIN")
             else:
                 platform_company = models.Company(
-                    name               = "SOS Algérie Platform",
+                    name               = "EchoAlert Platform",
                     industry           = "platform",
                     company_code       = "SUPER-ADMIN",
                     max_users          = 999,

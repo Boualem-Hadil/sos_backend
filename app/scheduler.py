@@ -1,5 +1,5 @@
 """
-scheduler.py — APScheduler cron jobs for SOS Algérie.
+scheduler.py — APScheduler cron jobs for EchoAlert.
 
 Runs a daily check for expiring/expired licenses and sends email notifications.
 """

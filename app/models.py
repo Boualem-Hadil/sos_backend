@@ -138,6 +138,7 @@ class Emergency(Base):
     latitude             = Column(Float, nullable=True)
     longitude            = Column(Float, nullable=True)
     location_description = Column(String(500), nullable=True)
+    voice_transcript     = Column(Text, nullable=True)          # raw STT text from the voice assistant
     status               = Column(SAEnum(EmergencyStatus), nullable=False,
                                   default=EmergencyStatus.active)
     started_at           = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

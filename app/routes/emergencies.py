@@ -51,6 +51,7 @@ async def report_emergency(
         latitude             = body.latitude,
         longitude            = body.longitude,
         location_description = body.location_description,
+        voice_transcript      = body.voice_transcript, 
         status               = models.EmergencyStatus.active,
         started_at           = datetime.now(timezone.utc),
     )

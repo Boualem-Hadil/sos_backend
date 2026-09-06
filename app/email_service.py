@@ -1,5 +1,5 @@
 """
-email_service.py — Send transactional emails for SOS Algérie.
+email_service.py — Send transactional emails for EchoAlert.
 
 Configure via .env:
   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, ADMIN_EMAIL
@@ -45,7 +45,7 @@ def send_email(to_addresses: List[str], subject: str, html_body: str) -> bool:
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"]    = f"SOS Algérie Platform <{SMTP_USER}>"
+        msg["From"]    = f"EchoAlert Platform <{SMTP_USER}>"
         msg["To"]      = ", ".join(recipients)
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
@@ -75,7 +75,7 @@ def _license_html(company_name: str, company_code: str, expiry_date: date, days_
         urgency_color = "#DC2626"
         status_text   = f"🚨 EXPIRE DANS {days_left} JOUR(S)"
         message       = f"La licence de <strong>{company_name}</strong> ({company_code}) expire dans <strong>{days_left} jour(s)</strong>, le <strong>{expiry_date.strftime('%d/%m/%Y')}</strong>."
-        action        = "Action urgente requise — contactez votre administrateur SOS Algérie pour renouveler."
+        action        = "Action urgente requise — contactez votre administrateur EchoAlert pour renouveler."
     else:
         urgency_color = "#F59E0B"
         status_text   = f"⚠️ EXPIRE DANS {days_left} JOURS"
@@ -94,7 +94,7 @@ def _license_html(company_name: str, company_code: str, expiry_date: date, days_
             <tr>
               <td style="background:linear-gradient(135deg,#DC2626,#7F1D1D);padding:32px 40px;text-align:center;">
                 <div style="font-size:36px;margin-bottom:8px;">🛡️</div>
-                <h1 style="color:#fff;font-size:22px;margin:0;font-weight:800;letter-spacing:1px;">SOS Algérie Platform</h1>
+                <h1 style="color:#fff;font-size:22px;margin:0;font-weight:800;letter-spacing:1px;">EchoAlert Platform</h1>
                 <p style="color:rgba(255,255,255,0.7);margin:8px 0 0;font-size:13px;">Notification de Licence</p>
               </td>
             </tr>
@@ -133,8 +133,8 @@ def _license_html(company_name: str, company_code: str, expiry_date: date, days_
             <tr>
               <td style="padding:24px 40px;border-top:1px solid #1E293B;text-align:center;">
                 <p style="color:#475569;font-size:12px;margin:0;">
-                  Ce message est envoyé automatiquement par la plateforme SOS Algérie.<br>
-                  © {date.today().year} SOS Algérie — Tous droits réservés.
+                  Ce message est envoyé automatiquement par la plateforme EchoAlert.<br>
+                  © {date.today().year} EchoAlert — Tous droits réservés.
                 </p>
               </td>
             </tr>
@@ -160,9 +160,9 @@ def send_license_expiry_warning(
       - All active notification recipients (passed as extra_recipients)
     """
     subject = (
-        f"[SOS Algérie] ⛔ Licence expirée — {company_name}"
+        f"[EchoAlert] ⛔ Licence expirée — {company_name}"
         if expired
-        else f"[SOS Algérie] ⚠️ Licence expire dans {days_left} jour(s) — {company_name}"
+        else f"[EchoAlert] ⚠️ Licence expire dans {days_left} jour(s) — {company_name}"
     )
     html  = _license_html(company_name, company_code, expiry_date, days_left, expired)
     

@@ -1,4 +1,4 @@
-# SOS Algérie Backend — README
+# EchoAlert Backend — README
 
 ## Quick Start
 

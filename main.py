@@ -1,5 +1,5 @@
 """
-SOS Algérie — FastAPI Backend
+EchoAlert — FastAPI Backend
 Entry point: uvicorn main:app --reload
 """
 import json
@@ -33,7 +33,7 @@ from app.scheduler import create_scheduler
 # ── App lifespan ──────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 SOS Algérie backend starting up …")
+    logger.info("🚀 EchoAlert backend starting up …")
     # Create all tables if they don't exist (dev convenience — use Alembic in prod)
     models.Base.metadata.create_all(bind=engine)
     # Start license-expiry scheduler
@@ -42,12 +42,12 @@ async def lifespan(app: FastAPI):
     logger.info("⏰ License expiry scheduler started (runs daily at 08:00)")
     yield
     scheduler.shutdown(wait=False)
-    logger.info("🛑 SOS Algérie backend shutting down …")
+    logger.info("🛑 EchoAlert backend shutting down …")
 
 
 # ── FastAPI instance ──────────────────────────────────────────────────────────
 app = FastAPI(
-    title       = "SOS Algérie API",
+    title       = "EchoAlert API",
     description = "B2B emergency management platform for industrial companies in Algeria",
     version     = "1.0.0",
     docs_url    = "/docs",
@@ -113,7 +113,7 @@ app.include_router(admin.router)
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
 def root():
-    return {"success": True, "message": "SOS Algérie API is running", "version": "1.0.0"}
+    return {"success": True, "message": "EchoAlert API is running", "version": "1.0.0"}
 
 
 @app.get("/health", tags=["Health"])

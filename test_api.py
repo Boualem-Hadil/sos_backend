@@ -1,5 +1,5 @@
 """
-test_api.py — Basic integration tests for SOS Algérie API.
+test_api.py — Basic integration tests for EchoAlert API.
 Run:  pytest test_api.py -v
 (requires the server to be running AND the database to be seeded)
 

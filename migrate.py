@@ -45,7 +45,7 @@ def migrate():
         # 3. Migrate old SYSADMIN-INTERNAL company code to SUPER-ADMIN if needed
         result = conn.execute(text("SELECT id FROM companies WHERE company_code = 'SYSADMIN-INTERNAL'")).fetchone()
         if result:
-            conn.execute(text("UPDATE companies SET company_code = 'SUPER-ADMIN', name = 'SOS Algerie Platform' WHERE company_code = 'SYSADMIN-INTERNAL'"))
+            conn.execute(text("UPDATE companies SET company_code = 'SUPER-ADMIN', name = 'EchoAlert Platform' WHERE company_code = 'SYSADMIN-INTERNAL'"))
             print("[+] Migrated company_code SYSADMIN-INTERNAL -> SUPER-ADMIN")
         else:
             print("[=] No SYSADMIN-INTERNAL company to migrate")
