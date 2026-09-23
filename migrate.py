@@ -62,6 +62,37 @@ def migrate():
         else:
             print("[=] No old 'admin' user to migrate")
 
+        # 5. Add must_change_password to users if missing
+        user_cols = [c["name"] for c in insp.get_columns("users")]
+        if "must_change_password" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE"))
+            print("[+] Added users.must_change_password")
+        else:
+            print("[=] users.must_change_password already exists")
+
+        # 6. Add company_id to notification_recipients if missing
+        nr_cols = [c["name"] for c in insp.get_columns("notification_recipients")]
+        if "company_id" not in nr_cols:
+            conn.execute(text("ALTER TABLE notification_recipients ADD COLUMN company_id UUID REFERENCES companies(id)"))
+            print("[+] Added notification_recipients.company_id")
+        else:
+            print("[=] notification_recipients.company_id already exists")
+
+
+        # 7. Replace unit and department string columns with UUID foreign keys
+        if "department_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN department_id UUID REFERENCES departments(id) ON DELETE SET NULL"))
+            print("[+] Added users.department_id")
+        else:
+            print("[=] users.department_id already exists")
+            
+        if "unit_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN unit_id UUID REFERENCES units(id) ON DELETE SET NULL"))
+            print("[+] Added users.unit_id")
+        else:
+            print("[=] users.unit_id already exists")
+
+
     print("\n[OK] Migration complete.")
 
 if __name__ == "__main__":

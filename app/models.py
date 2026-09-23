@@ -90,15 +90,16 @@ class User(Base):
     last_lng      = Column(Float, nullable=True)
     
     # Extra profile fields
-    unit          = Column(String(100), nullable=True)
-    department    = Column(String(100), nullable=True)
+    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
+    unit_id       = Column(UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True)
     position      = Column(String(100), nullable=True)
 
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     latitude      = Column(Float, nullable=True)
     longitude     = Column(Float, nullable=True)
     location_updated_at = Column(DateTime(timezone=True), nullable=True)
-    unit          = Column(String(100), nullable=True)
+    # Password lifecycle — set True after an admin temp-password reset
+    must_change_password = Column(Boolean, nullable=False, default=False)
 
     # employee_id must be unique per company
     __table_args__ = (
@@ -110,6 +111,9 @@ class User(Base):
     medical_profile = relationship("MedicalProfile", back_populates="user",
                                    uselist=False, cascade="all, delete-orphan")
     emergencies     = relationship("Emergency",      back_populates="user")
+    
+    department_rel  = relationship("Department")
+    unit_rel        = relationship("Unit")
 
     def __repr__(self):
         return f"<User {self.full_name} [{self.employee_id}]>"
@@ -191,10 +195,14 @@ class NotificationRecipient(Base):
     __tablename__ = "notification_recipients"
 
     id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email      = Column(String(255), nullable=False, unique=True)
+    email      = Column(String(255), nullable=False)
     name       = Column(String(255), nullable=False)
     is_active  = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # nullable — existing platform-level rows (company_id=NULL) remain valid
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
+
+    company = relationship("Company")
 
     def __repr__(self):
         return f"<NotificationRecipient {self.email}>"
@@ -232,3 +240,56 @@ class Message(Base):
 
     emergency = relationship("Emergency")
     sender    = relationship("User")
+
+
+# ─── Department ───────────────────────────────────────────────────────────────────────
+
+class Department(Base):
+    __tablename__ = "departments"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    name       = Column(String(100), nullable=False)
+    is_active  = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company")
+    units   = relationship("Unit", back_populates="department", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Department {self.name}>"
+
+
+# ─── Unit (child of Department) ──────────────────────────────────────────────────────────────
+
+class Unit(Base):
+    __tablename__ = "units"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="CASCADE"), nullable=False)
+    name          = Column(String(100), nullable=False)
+    is_active     = Column(Boolean, nullable=False, default=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    department = relationship("Department", back_populates="units")
+
+    def __repr__(self):
+        return f"<Unit {self.name}>"
+
+
+# ─── Audit Log ───────────────────────────────────────────────────────────────────────
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id  = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    actor_id    = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action      = Column(String(50), nullable=False)   # officer_created | officer_deactivated | password_reset | officer_reactivated
+    target_id   = Column(UUID(as_uuid=True), nullable=True)
+    target_name = Column(String(255), nullable=True)
+    meta        = Column(Text, nullable=True)           # JSON blob
+    created_at  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<AuditLog {self.action} by actor={self.actor_id}>"

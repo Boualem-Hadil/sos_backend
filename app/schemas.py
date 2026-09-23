@@ -48,8 +48,17 @@ class CompanyBase(BaseModel):
         return v.upper().strip()
 
 
+class CompanyAdminCreate(BaseModel):
+    """Credentials for the first company_admin, created atomically with the company."""
+    full_name: str
+    employee_id: str
+    password: str = Field(min_length=6)
+    phone: Optional[str] = None
+
+
 class CompanyCreate(CompanyBase):
-    pass
+    """Payload for POST /admin/companies. Include `admin` to atomically create the first company_admin."""
+    admin: Optional[CompanyAdminCreate] = None
 
 
 class CompanyUpdate(BaseModel):
@@ -116,8 +125,8 @@ class UserBase(BaseModel):
     full_name: str
     employee_id: str
     phone: Optional[str] = None
-    unit: Optional[str] = None
-    department: Optional[str] = None
+    department_id: Optional[UUID] = None
+    unit_id: Optional[UUID] = None
     position: Optional[str] = None
 
 class WorkerCreate(UserBase):
@@ -129,8 +138,8 @@ class WorkerUpdate(BaseModel):
     full_name: Optional[str] = None
     employee_id: Optional[str] = None
     phone: Optional[str] = None
-    unit: Optional[str] = None
-    department: Optional[str] = None
+    department_id: Optional[UUID] = None
+    unit_id: Optional[UUID] = None
     position: Optional[str] = None
     role: Optional[UserRole] = None
     assigned_officer_id: Optional[UUID] = None
@@ -382,13 +391,8 @@ class AdminStats(BaseModel):
 
 
 # ─── Officer Creation ─────────────────────────────────────────────────────────
-
-class OfficerCreate(BaseModel):
-    full_name: str
-    employee_id: str
-    password: str = Field(min_length=6)
-    phone: Optional[str] = None
-    company_id: UUID
+# OfficerCreate removed — POST /admin/officers has been deleted.
+# Safety officers are now created by company_admins via POST /users.
 
 
 # ─── Notification Recipients ──────────────────────────────────────────────────
@@ -404,6 +408,7 @@ class NotificationRecipientOut(BaseModel):
     name: str
     is_active: bool
     created_at: datetime
+    company_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -432,3 +437,71 @@ class MessageOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ─── Company Admin — new schemas ────────────────────────────────────────────────────────
+
+class DepartmentCreate(BaseModel):
+    name: str
+
+
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class UnitOut(BaseModel):
+    id: UUID
+    department_id: UUID
+    name: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DepartmentOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    name: str
+    is_active: bool
+    created_at: datetime
+    units: List[UnitOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class UnitCreate(BaseModel):
+    name: str
+
+
+class UnitUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class CompanyAdminStats(BaseModel):
+    total_officers: int
+    total_workers: int
+    total_departments: int
+    month_emergencies_open: int
+    month_emergencies_resolved: int
+    avg_response_minutes: Optional[float] = None
+
+
+class OfficerContactUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    employee_id: Optional[str] = None
+
+
+class PasswordResetOut(BaseModel):
+    temp_password: str
+    must_change_password: bool = True
+    message: str = "Password reset. The user must change it on next login."
+
+
+class NotificationRecipientCompanyCreate(BaseModel):
+    email: str
+    name: str
+    # company_id is injected server-side from the JWT — never from the body

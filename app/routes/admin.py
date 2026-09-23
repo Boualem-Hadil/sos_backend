@@ -96,12 +96,30 @@ def create_company(
         is_active          = True,
     )
     db.add(company)
+    db.flush()  # get company.id before creating admin
+
+    # ── Atomically create the first company_admin if provided ──────────────────
+    if body.admin:
+        # Check that the employee_id doesn’t already exist (safeguard, company is brand-new)
+        admin_user = models.User(
+            company_id    = company.id,
+            full_name     = body.admin.full_name,
+            employee_id   = body.admin.employee_id,
+            phone         = body.admin.phone,
+            password_hash = hash_password(body.admin.password),
+            role          = models.UserRole.company_admin,
+        )
+        db.add(admin_user)
+        db.flush()
+        db.add(models.MedicalProfile(user_id=admin_user.id, chronic_diseases=[], allergies=[]))
+        company.current_users += 1
+
     db.commit()
     db.refresh(company)
 
     return schemas.APIResponse(
         data    = schemas.CompanyOut.model_validate(company),
-        message = "Company created",
+        message = "Company created" + (" with admin account" if body.admin else ""),
     )
 
 
@@ -201,64 +219,11 @@ def expiring_companies(
     return schemas.APIResponse(data=result)
 
 
-# ─── Create Safety Officer ────────────────────────────────────────────────────
-
-@router.post("/officers",
-             response_model=schemas.APIResponse[schemas.UserOut],
-             status_code=status.HTTP_201_CREATED)
-def create_officer(
-    body: schemas.OfficerCreate,
-    _: models.User = Depends(require_super_admin),
-    db: Session = Depends(get_db),
-):
-    # Validate company exists
-    company = db.query(models.Company).filter(models.Company.id == body.company_id).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    if not company.is_active:
-        raise HTTPException(status_code=403, detail="Company is deactivated")
-
-    if company.current_users >= company.max_users:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Worker limit reached for this company ({company.max_users})",
-        )
-
-    # Check duplicate employee_id in company
-    existing = (
-        db.query(models.User)
-        .filter(
-            models.User.employee_id == body.employee_id,
-            models.User.company_id  == company.id,
-        )
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=409, detail="Employee ID already in use for this company")
-
-    officer = models.User(
-        company_id    = company.id,
-        full_name     = body.full_name,
-        employee_id   = body.employee_id,
-        phone         = body.phone,
-        password_hash = hash_password(body.password),
-        role          = models.UserRole.safety_officer,
-    )
-    db.add(officer)
-    db.flush()
-    db.add(models.MedicalProfile(user_id=officer.id, chronic_diseases=[], allergies=[]))
-    company.current_users += 1
-    db.commit()
-    db.refresh(officer)
-
-    return schemas.APIResponse(
-        data    = schemas.UserOut.model_validate(officer),
-        message = "Safety officer created",
-    )
-
 
 # ─── List Officers ────────────────────────────────────────────────────────────
+# NOTE: POST /admin/officers has been removed. Safety officers are now created
+# by company_admins via POST /users (enforced by role-guard on that endpoint).
+
 
 @router.get("/officers",
             response_model=schemas.APIResponse[list[schemas.UserOut]])

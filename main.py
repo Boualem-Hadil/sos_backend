@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
@@ -24,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger("sos_backend")
 
 # ── Import routes (after env is loaded) ──────────────────────────────────────
-from app.routes import auth, users, emergencies, companies, events, medical, admin, messages
+from app.routes import auth, users, emergencies, companies, events, medical, admin, messages, company_admin
 from app.database import engine
 from app import models
 from app.scheduler import create_scheduler
@@ -44,6 +47,8 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
     logger.info("🛑 EchoAlert backend shutting down …")
 
+from app.limiter import limiter
+
 
 # ── FastAPI instance ──────────────────────────────────────────────────────────
 app = FastAPI(
@@ -54,6 +59,8 @@ app = FastAPI(
     redoc_url   = "/redoc",
     lifespan    = lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 raw_origins = os.getenv("CORS_ORIGINS", '["*"]')
@@ -109,6 +116,7 @@ app.include_router(events.router)
 app.include_router(medical.router)
 app.include_router(admin.router)
 app.include_router(messages.router)
+app.include_router(company_admin.router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

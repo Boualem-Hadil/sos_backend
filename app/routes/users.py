@@ -29,17 +29,36 @@ def list_users(
 
 # ─── Add new worker ───────────────────────────────────────────────────────────
 
+# Defines which roles each caller is permitted to create.
+# super_admin is unrestricted; every other role can only create exactly one level below.
+_ALLOWED_CREATE_ROLES: dict[models.UserRole, list[models.UserRole]] = {
+    models.UserRole.company_admin:  [models.UserRole.safety_officer],
+    models.UserRole.safety_officer: [models.UserRole.worker],
+    models.UserRole.super_admin:    list(models.UserRole),   # no restriction
+}
+
 @router.post("", response_model=schemas.APIResponse[schemas.UserOut], status_code=status.HTTP_201_CREATED)
 def create_user(
     body: schemas.WorkerCreate,
     current_user: models.User = Depends(require_admin_or_officer),
     db: Session = Depends(get_db),
 ):
-    # Check limit
+    # ── Role creation guard ───────────────────────────────────────────────────
+    allowed_roles = _ALLOWED_CREATE_ROLES.get(current_user.role, [])
+    if body.role not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Your role ('{current_user.role.value}') is not permitted to create "
+                f"users with role '{body.role.value}'."
+            ),
+        )
+
+    # ── Company limit check ───────────────────────────────────────────────────
     company = current_user.company
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-        
+
     if company.current_users >= company.max_users:
         raise HTTPException(status_code=403, detail=f"Worker limit reached ({company.max_users})")
 
@@ -72,7 +91,7 @@ def create_user(
 
     return schemas.APIResponse(
         data=schemas.UserOut.model_validate(user),
-        message="Worker created"
+        message="User created"
     )
 
 

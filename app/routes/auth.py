@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -12,9 +12,39 @@ from app.auth import (
 )
 from app.database import get_db
 from app.sse_manager import sse_manager
+from app.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+
+# ─── Public Lookups ───────────────────────────────────────────────────────────
+
+@router.get("/company/{company_code}/departments", response_model=schemas.APIResponse[list[schemas.DepartmentOut]])
+@limiter.limit("10/minute")
+def get_company_departments(request: Request, company_code: str, db: Session = Depends(get_db)):
+    company = db.query(models.Company).filter(
+        models.Company.company_code == company_code.upper().strip(),
+        models.Company.is_active == True,
+    ).first()
+    
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found or inactive")
+
+    departments = (
+        db.query(models.Department)
+        .filter(
+            models.Department.company_id == company.id,
+            models.Department.is_active == True,
+        )
+        .order_by(models.Department.name)
+        .all()
+    )
+    
+    # Filter out inactive units before returning
+    for dept in departments:
+        dept.units = [u for u in dept.units if u.is_active]
+
+    return schemas.APIResponse(data=[schemas.DepartmentOut.model_validate(d) for d in departments])
 
 # ─── Register ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +89,8 @@ def register(body: schemas.UserRegister, background_tasks: BackgroundTasks, db: 
         full_name     = body.full_name,
         employee_id   = body.employee_id,
         phone         = body.phone,
-        unit          = body.unit,  
+        department_id = body.department_id,
+        unit_id       = body.unit_id,
         password_hash = hash_password(body.password),
         role          = models.UserRole.worker,
     )
