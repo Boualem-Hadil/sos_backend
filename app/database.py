@@ -15,6 +15,16 @@ if not DATABASE_URL:
         "Copy .env.example → .env and fill in your Postgres connection string."
     )
 
+# Normalize the URL scheme to explicitly use the psycopg2 driver.
+# Railway sets `postgres://` or `postgresql://`.
+# SQLAlchemy 1.4+ rejects `postgres://`, and we want to ensure psycopg2 is used, not psycopg (v3).
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+elif DATABASE_URL.startswith("postgresql+psycopg://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,

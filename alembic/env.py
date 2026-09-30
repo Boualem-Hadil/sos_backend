@@ -14,7 +14,16 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # Override the sqlalchemy.url with the value from .env
 config = context.config
-config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+raw_url = os.environ.get("DATABASE_URL", "")
+
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif raw_url.startswith("postgresql://"):
+    raw_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+elif raw_url.startswith("postgresql+psycopg://"):
+    raw_url = raw_url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+
+config.set_main_option("sqlalchemy.url", raw_url)
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
