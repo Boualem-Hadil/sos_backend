@@ -15,10 +15,9 @@ import psycopg2
 
 load_dotenv()
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://sos_user:sos_password@localhost:5432/sos_db",
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set. Add it to .env")
 
 COLUMNS = [
     ("last_seen_active", "TIMESTAMP WITH TIME ZONE"),

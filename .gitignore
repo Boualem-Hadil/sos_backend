@@ -1,4 +1,4 @@
-# SOS Algérie Backend — .gitignore
+# EchoAlert Backend — .gitignore
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -6,6 +6,7 @@ __pycache__/
 venv/
 env/
 .env
+!.env.example
 
 # Alembic
 alembic/versions/*.py

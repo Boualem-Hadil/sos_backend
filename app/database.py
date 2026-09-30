@@ -6,7 +6,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost/sos_algerie")
+# Require DATABASE_URL to be set explicitly in production.
+# For local dev, set it in .env (see .env.example).
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. "
+        "Copy .env.example → .env and fill in your Postgres connection string."
+    )
 
 engine = create_engine(
     DATABASE_URL,
