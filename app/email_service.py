@@ -3,6 +3,10 @@ email_service.py — Send transactional emails for EchoAlert.
 
 Configure via .env:
   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, ADMIN_EMAIL
+
+  ADMIN_EMAIL accepts a single address or a comma-separated list:
+    ADMIN_EMAIL=alice@example.com
+    ADMIN_EMAIL=alice@example.com,bob@example.com
 """
 import logging
 import os
@@ -14,11 +18,16 @@ from typing import List, Optional
 
 logger = logging.getLogger("sos_backend.email")
 
-SMTP_HOST    = os.getenv("SMTP_HOST", "")
-SMTP_PORT    = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER    = os.getenv("SMTP_USER", "")
+SMTP_HOST     = os.getenv("SMTP_HOST", "")
+SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER     = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-ADMIN_EMAIL  = os.getenv("ADMIN_EMAIL", "")
+
+# Comma-separated list of super-admin addresses that receive every
+# platform-level notification (license expiry, etc.).
+# Single address still works — backward-compatible.
+_raw_admin_emails = os.getenv("ADMIN_EMAIL", "")
+ADMIN_EMAILS: List[str] = [e.strip() for e in _raw_admin_emails.split(",") if e.strip()]
 
 
 def _smtp_configured() -> bool:
@@ -156,15 +165,16 @@ def send_license_expiry_warning(
 ) -> None:
     """
     Send license expiry email to:
-      - Platform admin (ADMIN_EMAIL)
-      - All active notification recipients (passed as extra_recipients)
+      - All platform super-admins (ADMIN_EMAIL — single address or comma-separated list)
+      - All active notification recipients stored in the DB (passed as extra_recipients)
+      - The company's own contact_email (also passed via extra_recipients by the scheduler)
     """
     subject = (
         f"[EchoAlert] ⛔ Licence expirée — {company_name}"
         if expired
         else f"[EchoAlert] ⚠️ Licence expire dans {days_left} jour(s) — {company_name}"
     )
-    html  = _license_html(company_name, company_code, expiry_date, days_left, expired)
-    
-    recipients = list({ADMIN_EMAIL} | set(extra_recipients or []))
+    html = _license_html(company_name, company_code, expiry_date, days_left, expired)
+
+    recipients = list(set(ADMIN_EMAILS) | set(extra_recipients or []))
     send_email([r for r in recipients if r], subject, html)
