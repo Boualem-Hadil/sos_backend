@@ -95,94 +95,6 @@ def create_user(
     )
 
 
-# ─── Get single user profile + medical profile ───────────────────────────────
-
-@router.get("/{user_id}", response_model=schemas.APIResponse[schemas.UserOut])
-def get_user(
-    user_id: str,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Workers can only see their own profile; officers/admins see their company
-    if current_user.role == models.UserRole.worker:
-        if str(user.id) != str(current_user.id):
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif current_user.role != models.UserRole.super_admin:
-        if str(user.company_id) != str(current_user.company_id):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-    return schemas.APIResponse(data=schemas.UserOut.model_validate(user))
-
-
-# ─── Update single user profile ───────────────────────────────────────────────
-
-@router.put("/{user_id}", response_model=schemas.APIResponse[schemas.UserOut])
-def update_user(
-    user_id: str,
-    body: schemas.WorkerUpdate,
-    current_user: models.User = Depends(require_admin_or_officer),
-    db: Session = Depends(get_db),
-):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if current_user.role != models.UserRole.super_admin:
-        if str(user.company_id) != str(current_user.company_id):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-    # Check for employee_id conflict if changed
-    if body.employee_id and body.employee_id != user.employee_id:
-        existing = (
-            db.query(models.User)
-            .filter(models.User.employee_id == body.employee_id, models.User.company_id == user.company_id)
-            .first()
-        )
-        if existing:
-            raise HTTPException(status_code=409, detail="Employee ID already exists")
-
-    for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(user, field, value)
-
-    db.commit()
-    db.refresh(user)
-    return schemas.APIResponse(data=schemas.UserOut.model_validate(user), message="User updated")
-
-
-# ─── Deactivate user ─────────────────────────────────────────────────────────
-
-@router.delete("/{user_id}", response_model=schemas.APIResponse[None])
-def deactivate_user(
-    user_id: str,
-    current_user: models.User = Depends(require_admin_or_officer),
-    db: Session = Depends(get_db),
-):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    if current_user.role != models.UserRole.super_admin:
-        if str(user.company_id) != str(current_user.company_id):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-    if str(user.id) == str(current_user.id):
-        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
-
-    user.is_active = False
-    
-    # We could decrease company.current_users here if needed, but let's keep it simple
-    company = user.company
-    if company.current_users > 0:
-        company.current_users -= 1
-        
-    db.commit()
-    return schemas.APIResponse(data=None, message="User deactivated")
-
-
 # ─── Upsert medical profile (Self) ────────────────────────────────────────────
 
 @router.put("/medical-profile", response_model=schemas.APIResponse[schemas.MedicalProfileOut])
@@ -205,41 +117,6 @@ def upsert_medical_profile(
     else:
         # Create new
         profile = models.MedicalProfile(user_id=current_user.id, **body.model_dump())
-        db.add(profile)
-
-    db.commit()
-    db.refresh(profile)
-    return schemas.APIResponse(
-        data=schemas.MedicalProfileOut.model_validate(profile),
-        message="Medical profile updated",
-    )
-
-
-# ─── Upsert medical profile (Admin/Officer) ───────────────────────────────────
-
-@router.put("/{user_id}/medical-profile", response_model=schemas.APIResponse[schemas.MedicalProfileOut])
-def upsert_user_medical_profile(
-    user_id: str,
-    body: schemas.MedicalProfileCreate,
-    current_user: models.User = Depends(require_admin_or_officer),
-    db: Session = Depends(get_db),
-):
-    target = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if current_user.role != models.UserRole.super_admin:
-        if str(target.company_id) != str(current_user.company_id):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-    profile = db.query(models.MedicalProfile).filter(models.MedicalProfile.user_id == target.id).first()
-
-    if profile:
-        for field, value in body.model_dump(exclude_unset=False).items():
-            setattr(profile, field, value)
-        profile.updated_at = datetime.now(timezone.utc)
-    else:
-        profile = models.MedicalProfile(user_id=target.id, **body.model_dump())
         db.add(profile)
 
     db.commit()
@@ -369,3 +246,126 @@ def delete_fcm_token(
         db.delete(token_record)
         db.commit()
     return schemas.APIResponse(data=None, message="Token deleted")
+# ─── Get single user profile + medical profile ───────────────────────────────
+
+@router.get("/{user_id}", response_model=schemas.APIResponse[schemas.UserOut])
+def get_user(
+    user_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Workers can only see their own profile; officers/admins see their company
+    if current_user.role == models.UserRole.worker:
+        if str(user.id) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif current_user.role != models.UserRole.super_admin:
+        if str(user.company_id) != str(current_user.company_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    return schemas.APIResponse(data=schemas.UserOut.model_validate(user))
+
+
+# ─── Update single user profile ───────────────────────────────────────────────
+
+@router.put("/{user_id}", response_model=schemas.APIResponse[schemas.UserOut])
+def update_user(
+    user_id: str,
+    body: schemas.WorkerUpdate,
+    current_user: models.User = Depends(require_admin_or_officer),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if current_user.role != models.UserRole.super_admin:
+        if str(user.company_id) != str(current_user.company_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check for employee_id conflict if changed
+    if body.employee_id and body.employee_id != user.employee_id:
+        existing = (
+            db.query(models.User)
+            .filter(models.User.employee_id == body.employee_id, models.User.company_id == user.company_id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=409, detail="Employee ID already exists")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    return schemas.APIResponse(data=schemas.UserOut.model_validate(user), message="User updated")
+
+
+# ─── Deactivate user ─────────────────────────────────────────────────────────
+
+@router.delete("/{user_id}", response_model=schemas.APIResponse[None])
+def deactivate_user(
+    user_id: str,
+    current_user: models.User = Depends(require_admin_or_officer),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if current_user.role != models.UserRole.super_admin:
+        if str(user.company_id) != str(current_user.company_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    if str(user.id) == str(current_user.id):
+        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
+
+    user.is_active = False
+    
+    # We could decrease company.current_users here if needed, but let's keep it simple
+    company = user.company
+    if company.current_users > 0:
+        company.current_users -= 1
+        
+    db.commit()
+    return schemas.APIResponse(data=None, message="User deactivated")
+
+
+# ─── Upsert medical profile (Admin/Officer) ───────────────────────────────────
+
+@router.put("/{user_id}/medical-profile", response_model=schemas.APIResponse[schemas.MedicalProfileOut])
+def upsert_user_medical_profile(
+    user_id: str,
+    body: schemas.MedicalProfileCreate,
+    current_user: models.User = Depends(require_admin_or_officer),
+    db: Session = Depends(get_db),
+):
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if current_user.role != models.UserRole.super_admin:
+        if str(target.company_id) != str(current_user.company_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    profile = db.query(models.MedicalProfile).filter(models.MedicalProfile.user_id == target.id).first()
+
+    if profile:
+        for field, value in body.model_dump(exclude_unset=False).items():
+            setattr(profile, field, value)
+        profile.updated_at = datetime.now(timezone.utc)
+    else:
+        profile = models.MedicalProfile(user_id=target.id, **body.model_dump())
+        db.add(profile)
+
+    db.commit()
+    db.refresh(profile)
+    return schemas.APIResponse(
+        data=schemas.MedicalProfileOut.model_validate(profile),
+        message="Medical profile updated",
+    )
+
+
