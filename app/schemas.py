@@ -178,6 +178,8 @@ class UserOut(UserBase):
     # Live location — nullable until the worker's app sends its first fix
     last_lat: Optional[float] = None
     last_lng: Optional[float] = None
+    department_name: Optional[str] = None
+    unit_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

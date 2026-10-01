@@ -266,7 +266,11 @@ def get_user(
         if str(user.company_id) != str(current_user.company_id):
             raise HTTPException(status_code=403, detail="Access denied")
 
-    return schemas.APIResponse(data=schemas.UserOut.model_validate(user))
+    user_dict = schemas.UserOut.model_validate(user).model_dump()
+    user_dict["department_name"] = user.department_rel.name if user.department_rel else None
+    user_dict["unit_name"] = user.unit_rel.name if user.unit_rel else None
+
+    return schemas.APIResponse(data=user_dict)
 
 
 # ─── Update single user profile ───────────────────────────────────────────────
