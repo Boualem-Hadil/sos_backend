@@ -31,13 +31,16 @@ def check_license_expiry():
         today = date.today()
         cutoff = today + timedelta(days=WARNING_DAYS)
 
-        # Get all active notification recipients
-        recipients = (
+        # Get all active SUPER ADMIN notification recipients (platform level, company_id is NULL)
+        super_admin_recipients = (
             db.query(models.NotificationRecipient)
-            .filter(models.NotificationRecipient.is_active == True)
+            .filter(
+                models.NotificationRecipient.is_active == True,
+                models.NotificationRecipient.company_id == None
+            )
             .all()
         )
-        recipient_emails = [r.email for r in recipients]
+        super_admin_emails = [r.email for r in super_admin_recipients]
 
         # Find companies with a subscription_end set
         companies = (
@@ -54,10 +57,25 @@ def check_license_expiry():
             end = company.subscription_end
             if end is None:
                 continue
+            
+            # Get this company's active notification recipients
+            company_recipients = (
+                db.query(models.NotificationRecipient)
+                .filter(
+                    models.NotificationRecipient.is_active == True,
+                    models.NotificationRecipient.company_id == company.id
+                )
+                .all()
+            )
+            company_emails = [r.email for r in company_recipients]
 
-            extra = list(recipient_emails)
+            # Combine super admin emails, company recipient emails, and the company's main contact email
+            extra = list(super_admin_emails) + list(company_emails)
             if company.contact_email:
                 extra.append(company.contact_email)
+            
+            # Deduplicate emails
+            extra = list(set(extra))
 
             if end < today:
                 # Already expired
