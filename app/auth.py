@@ -15,13 +15,13 @@ from app import models, schemas
 
 load_dotenv()
 
-# ─── Config ───────────────────────────────────────────────────────────────────
+# --- Config ----
 
 SECRET_KEY   = os.getenv("SECRET_KEY", "fallback-secret-key")
 ALGORITHM    = os.getenv("ALGORITHM", "HS256")
 EXPIRE_DAYS  = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", "7"))
 
-# ─── Password hashing ─────────────────────────────────────────────────────────
+# --- Password hashing ----
 
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
@@ -31,7 +31,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
-# ─── JWT ──────────────────────────────────────────────────────────────────────
+# --- JWT ----
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -67,7 +67,7 @@ def decode_token(token: str) -> schemas.TokenData:
         ) from exc
 
 
-# ─── Dependencies ─────────────────────────────────────────────────────────────
+# --- Dependencies ----
 
 def get_current_token(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),

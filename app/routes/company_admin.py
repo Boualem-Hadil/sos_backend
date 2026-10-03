@@ -25,7 +25,7 @@ from app.database import get_db
 router = APIRouter(prefix="/company-admin", tags=["Company Admin"])
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# --- Helpers ----
 
 def _generate_temp_password(length: int = 12) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$"
@@ -63,7 +63,7 @@ def _get_officer_in_company(user_id: str, company_id, db: Session) -> models.Use
     return user
 
 
-# ─── Overview Stats ───────────────────────────────────────────────────────────
+# --- Overview Stats ----
 
 @router.get("/overview", response_model=schemas.APIResponse[schemas.CompanyAdminStats])
 def company_admin_overview(
@@ -142,7 +142,7 @@ def company_admin_overview(
     )
 
 
-# ─── Officers ─────────────────────────────────────────────────────────────────
+# --- Officers ----
 
 @router.get("/officers", response_model=schemas.APIResponse[list[schemas.UserOut]])
 def list_officers(
@@ -253,7 +253,7 @@ def reset_officer_password(
     )
 
 
-# ─── Workers (read-only) ──────────────────────────────────────────────────────
+# --- Workers (read-only) ----
 
 @router.get("/workers", response_model=schemas.APIResponse[list[schemas.UserOut]])
 def list_workers(
@@ -272,7 +272,7 @@ def list_workers(
     return schemas.APIResponse(data=[schemas.UserOut.model_validate(w) for w in workers])
 
 
-# ─── Departments ──────────────────────────────────────────────────────────────
+# --- Departments ----
 
 @router.get("/departments", response_model=schemas.APIResponse[list[schemas.DepartmentOut]])
 def list_departments(
@@ -323,7 +323,7 @@ def update_department(
     return schemas.APIResponse(data=schemas.DepartmentOut.model_validate(dept), message="Department updated")
 
 
-# ─── Units ────────────────────────────────────────────────────────────────────
+# --- Units ----
 
 @router.get("/departments/{dept_id}/units", response_model=schemas.APIResponse[list[schemas.UnitOut]])
 def list_units(
@@ -395,7 +395,7 @@ def update_unit(
     return schemas.APIResponse(data=schemas.UnitOut.model_validate(unit), message="Unit updated")
 
 
-# ─── Notification Recipients ──────────────────────────────────────────────────
+# --- Notification Recipients ----
 
 @router.get("/notifications", response_model=schemas.APIResponse[list[schemas.NotificationRecipientOut]])
 def list_notification_recipients(
@@ -457,7 +457,7 @@ def remove_notification_recipient(
     return schemas.APIResponse(data=None, message="Recipient removed")
 
 
-# ─── Emergency History ────────────────────────────────────────────────────────
+# --- Emergency History ----
 
 @router.get("/history", response_model=schemas.APIResponse[list[schemas.EmergencyOut]])
 def emergency_history(
@@ -505,7 +505,7 @@ def emergency_history(
     )
 
 
-# ─── Company Settings ─────────────────────────────────────────────────────────
+# --- Company Settings ----
 
 @router.get("/settings", response_model=schemas.APIResponse[schemas.CompanyOut])
 def get_company_settings(

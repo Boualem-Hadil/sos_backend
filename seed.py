@@ -17,7 +17,7 @@ from app.database import SessionLocal, engine
 from app import models
 from app.auth import hash_password
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# -- helpers ----
 
 def now():
     return datetime.now(timezone.utc)
@@ -27,7 +27,7 @@ def days_ago(n: int):
     return now() - timedelta(days=n)
 
 
-# ── seed data ─────────────────────────────────────────────────────────────────
+# -- seed data ----
 
 COMPANIES = [
     {
@@ -87,7 +87,7 @@ SAMPLE_EMERGENCIES = [
 ]
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
+# -- main ----
 
 def seed():
     print("[*] Creating all tables ...")
@@ -95,7 +95,7 @@ def seed():
 
     db = SessionLocal()
     try:
-        # ── Super admin ───────────────────────────────────────────────────────
+        # -- Super admin ----
         # Platform company for the super admin
         platform_company = db.query(models.Company).filter_by(company_code="SUPER-ADMIN").first()
         if not platform_company:
@@ -105,7 +105,7 @@ def seed():
                 platform_company.company_code = "SUPER-ADMIN"
                 platform_company.name = "EchoAlert Platform"
                 db.flush()
-                print("  ✅ Migrated platform company code → SUPER-ADMIN")
+                print("   Migrated platform company code → SUPER-ADMIN")
             else:
                 platform_company = models.Company(
                     name               = "EchoAlert Platform",
@@ -118,7 +118,7 @@ def seed():
                 )
                 db.add(platform_company)
                 db.flush()
-                print("  ✅ Platform company created (SUPER-ADMIN)")
+                print("   Platform company created (SUPER-ADMIN)")
 
         # Create / update super admin user
         existing_admin = (
@@ -134,14 +134,14 @@ def seed():
         )
 
         if existing_admin:
-            print("  ⏭  super_admin already exists (superAdmin)")
+            print("    super_admin already exists (superAdmin)")
         elif old_admin:
             # Migrate old admin to new credentials
             old_admin.employee_id   = "superAdmin"
             old_admin.password_hash = hash_password("turbocooling")
             old_admin.full_name     = "Super Administrateur"
             db.flush()
-            print("  ✅ Migrated super_admin to new credentials (superAdmin / turbocooling)")
+            print("   Migrated super_admin to new credentials (superAdmin / turbocooling)")
         else:
             admin = models.User(
                 company_id    = platform_company.id,
@@ -155,10 +155,10 @@ def seed():
             db.flush()
             db.add(models.MedicalProfile(user_id=admin.id, chronic_diseases=[], allergies=[]))
             platform_company.current_users += 1
-            print("  ✅ super_admin created  (employee_id=superAdmin  password=turbocooling  company_code=SUPER-ADMIN)")
+            print("   super_admin created  (employee_id=superAdmin  password=turbocooling  company_code=SUPER-ADMIN)")
 
 
-        # ── Companies + workers ───────────────────────────────────────────────
+        # -- Companies + workers ----
         company_objects = {}
         medical_idx = 0
 
@@ -168,9 +168,9 @@ def seed():
                 company = models.Company(**c_data, is_active=True)
                 db.add(company)
                 db.flush()
-                print(f"  ✅ Company: {c_data['name']}  ({c_data['company_code']})")
+                print(f"   Company: {c_data['name']}  ({c_data['company_code']})")
             else:
-                print(f"  ⏭  Company already exists: {c_data['company_code']}")
+                print(f"    Company already exists: {c_data['company_code']}")
 
             company_objects[c_data["company_code"]] = company
 
@@ -205,13 +205,13 @@ def seed():
                         emergency_notes      = "Pas de notes supplémentaires.",
                     ))
                     company.current_users += 1
-                    print(f"    👤 {w_data['full_name']}  [{w_data['employee_id']}]  role={w_data['role'].value}")
+                    print(f"     {w_data['full_name']}  [{w_data['employee_id']}]  role={w_data['role'].value}")
                 else:
-                    print(f"    ⏭  Worker already exists: {w_data['employee_id']}")
+                    print(f"      Worker already exists: {w_data['employee_id']}")
 
                 medical_idx += 1
 
-        # ── Sample emergencies (Sonatrach) ────────────────────────────────────
+        # -- Sample emergencies (Sonatrach) ----
         sonatrach = company_objects.get("SONATRACH-2024")
         if sonatrach:
             first_worker = db.query(models.User).filter_by(
@@ -239,10 +239,10 @@ def seed():
                 )
                 db.add(emergency)
 
-            print(f"  ✅ {len(SAMPLE_EMERGENCIES)} sample emergencies added for Sonatrach")
+            print(f"   {len(SAMPLE_EMERGENCIES)} sample emergencies added for Sonatrach")
 
         db.commit()
-        print("\n✅ Seeding complete!")
+        print("\n Seeding complete!")
         print("─" * 60)
         print("  Login credentials:")
         print("  super_admin → employee_id: superAdmin  | password: turbocooling | company_code: SUPER-ADMIN")
@@ -251,7 +251,7 @@ def seed():
 
     except Exception as exc:
         db.rollback()
-        print(f"\n❌ Seed failed: {exc}")
+        print(f"\n Seed failed: {exc}")
         raise
     finally:
         db.close()

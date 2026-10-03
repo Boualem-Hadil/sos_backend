@@ -72,7 +72,7 @@ def send_email(to_addresses: List[str], subject: str, html_body: str) -> bool:
         return False
 
 
-# ── License Expiry Templates ──────────────────────────────────────────────────
+# -- License Expiry Templates ----
 
 def _license_html(company_name: str, company_code: str, expiry_date: date, days_left: int, expired: bool) -> str:
     if expired:

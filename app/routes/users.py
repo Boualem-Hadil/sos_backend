@@ -11,7 +11,7 @@ from app.sse_manager import sse_manager
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-# ─── List all workers in same company (officer/admin only) ────────────────────
+# --- List all workers in same company (officer/admin only) ----
 
 @router.get("", response_model=schemas.APIResponse[list[schemas.UserOut]])
 def list_users(
@@ -27,7 +27,7 @@ def list_users(
     return schemas.APIResponse(data=[schemas.UserOut.model_validate(u) for u in users])
 
 
-# ─── Add new worker ───────────────────────────────────────────────────────────
+# --- Add new worker ----
 
 # Defines which roles each caller is permitted to create.
 # super_admin is unrestricted; every other role can only create exactly one level below.
@@ -43,7 +43,7 @@ def create_user(
     current_user: models.User = Depends(require_admin_or_officer),
     db: Session = Depends(get_db),
 ):
-    # ── Role creation guard ───────────────────────────────────────────────────
+    # -- Role creation guard ----
     allowed_roles = _ALLOWED_CREATE_ROLES.get(current_user.role, [])
     if body.role not in allowed_roles:
         raise HTTPException(
@@ -54,7 +54,7 @@ def create_user(
             ),
         )
 
-    # ── Company limit check ───────────────────────────────────────────────────
+    # -- Company limit check ----
     company = current_user.company
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -95,7 +95,7 @@ def create_user(
     )
 
 
-# ─── Upsert medical profile (Self) ────────────────────────────────────────────
+# --- Upsert medical profile (Self) ----
 
 @router.put("/medical-profile", response_model=schemas.APIResponse[schemas.MedicalProfileOut])
 def upsert_medical_profile(
@@ -127,7 +127,7 @@ def upsert_medical_profile(
     )
 
 
-# ─── Update last-seen heartbeat ───────────────────────────────────────────────
+# --- Update last-seen heartbeat ----
 
 @router.put("/last-seen", response_model=schemas.APIResponse[schemas.UserLastSeen])
 def update_last_seen(
@@ -143,7 +143,7 @@ def update_last_seen(
     )
 
 
-# ─── Update location heartbeat ────────────────────────────────────────────────
+# --- Update location heartbeat ----
 
 @router.put("/heartbeat", response_model=schemas.APIResponse)
 def update_location_heartbeat(
@@ -160,7 +160,7 @@ def update_location_heartbeat(
         message="Worker location heartbeat updated"
     )
 
-# ─── Update live location ──────────────────────────────────────────────────────────
+# --- Update live location ----
 
 @router.put("/location", response_model=schemas.APIResponse[dict])
 async def update_location(
@@ -208,7 +208,7 @@ async def update_location(
     return schemas.APIResponse(data=payload, message="Location updated")
 
 
-# ─── FCM ──────────────────────────────────────────────────────────────────────
+# --- FCM ----
 
 @router.post("/fcm-tokens", response_model=schemas.APIResponse[None])
 def register_fcm_token(
@@ -246,7 +246,7 @@ def delete_fcm_token(
         db.delete(token_record)
         db.commit()
     return schemas.APIResponse(data=None, message="Token deleted")
-# ─── Get single user profile + medical profile ───────────────────────────────
+# --- Get single user profile + medical profile ----
 
 @router.get("/{user_id}", response_model=schemas.APIResponse[schemas.UserOut])
 def get_user(
@@ -273,7 +273,7 @@ def get_user(
     return schemas.APIResponse(data=user_dict)
 
 
-# ─── Update single user profile ───────────────────────────────────────────────
+# --- Update single user profile ----
 
 @router.put("/{user_id}", response_model=schemas.APIResponse[schemas.UserOut])
 def update_user(
@@ -308,7 +308,7 @@ def update_user(
     return schemas.APIResponse(data=schemas.UserOut.model_validate(user), message="User updated")
 
 
-# ─── Deactivate user ─────────────────────────────────────────────────────────
+# --- Deactivate user ----
 
 @router.delete("/{user_id}", response_model=schemas.APIResponse[None])
 def deactivate_user(
@@ -338,7 +338,7 @@ def deactivate_user(
     return schemas.APIResponse(data=None, message="User deactivated")
 
 
-# ─── Upsert medical profile (Admin/Officer) ───────────────────────────────────
+# --- Upsert medical profile (Admin/Officer) ----
 
 @router.put("/{user_id}/medical-profile", response_model=schemas.APIResponse[schemas.MedicalProfileOut])
 def upsert_user_medical_profile(

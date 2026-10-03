@@ -28,7 +28,7 @@ def _build_credential() -> credentials.Base | None:
     Returns a credentials.Certificate if (1) or (2) succeeds, otherwise None
     (so the caller can fall through to ADC).
     """
-    # ── 1. JSON string from environment (Railway-friendly) ────────────────────
+    # -- 1. JSON string from environment (Railway-friendly) ----
     cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
     if cred_json:
         try:
@@ -42,7 +42,7 @@ def _build_credential() -> credentials.Base | None:
             # Don't fall through to a broken credential — surface the mistake.
             raise
 
-    # ── 2. File path (local dev fallback) ─────────────────────────────────────
+    # -- 2. File path (local dev fallback) ----
     cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
     if cred_path:
         if os.path.exists(cred_path):
@@ -55,7 +55,7 @@ def _build_credential() -> credentials.Base | None:
                 cred_path,
             )
 
-    # ── 3. ADC / GOOGLE_APPLICATION_CREDENTIALS ───────────────────────────────
+    # -- 3. ADC / GOOGLE_APPLICATION_CREDENTIALS ----
     # Return None to signal that initialize_app() should be called with no cred arg.
     return None
 

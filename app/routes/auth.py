@@ -17,7 +17,7 @@ from app.limiter import limiter
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-# ─── Public Lookups ───────────────────────────────────────────────────────────
+# --- Public Lookups ----
 
 @router.get("/company/{company_code}/departments", response_model=schemas.APIResponse[list[schemas.DepartmentOut]])
 @limiter.limit("10/minute")
@@ -46,7 +46,7 @@ def get_company_departments(request: Request, company_code: str, db: Session = D
 
     return schemas.APIResponse(data=[schemas.DepartmentOut.model_validate(d) for d in departments])
 
-# ─── Register ─────────────────────────────────────────────────────────────────
+# --- Register ----
 
 @router.post("/register", response_model=schemas.APIResponse[schemas.RegisterResponse],
              status_code=status.HTTP_201_CREATED)
@@ -138,7 +138,7 @@ def register(body: schemas.UserRegister, background_tasks: BackgroundTasks, db: 
     )
 
 
-# ─── Login ────────────────────────────────────────────────────────────────────
+# --- Login ----
 
 @router.post("/login", response_model=schemas.APIResponse[schemas.LoginResponse])
 def login(body: schemas.UserLogin, db: Session = Depends(get_db)):
@@ -182,7 +182,7 @@ def login(body: schemas.UserLogin, db: Session = Depends(get_db)):
     )
 
 
-# ─── Me ───────────────────────────────────────────────────────────────────────
+# --- Me ----
 
 @router.get("/me", response_model=schemas.APIResponse[schemas.UserWithCompany])
 def me(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -11,7 +11,7 @@ from app.database import get_db
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
-# ─── Platform Stats ───────────────────────────────────────────────────────────
+# --- Platform Stats ----
 
 @router.get("/stats", response_model=schemas.APIResponse[schemas.AdminStats])
 def admin_stats(
@@ -67,7 +67,7 @@ def admin_stats(
     )
 
 
-# ─── Create Company ───────────────────────────────────────────────────────────
+# --- Create Company ----
 
 @router.post("/companies",
              response_model=schemas.APIResponse[schemas.CompanyOut],
@@ -98,7 +98,7 @@ def create_company(
     db.add(company)
     db.flush()  # get company.id before creating admin
 
-    # ── Atomically create the first company_admin if provided ──────────────────
+    # -- Atomically create the first company_admin if provided ----
     if body.admin:
         # Check that the employee_id doesn’t already exist (safeguard, company is brand-new)
         admin_user = models.User(
@@ -123,7 +123,7 @@ def create_company(
     )
 
 
-# ─── List All Companies ───────────────────────────────────────────────────────
+# --- List All Companies ----
 
 @router.get("/companies",
             response_model=schemas.APIResponse[list[schemas.CompanyStats]])
@@ -160,7 +160,7 @@ def list_companies(
     return schemas.APIResponse(data=result)
 
 
-# ─── Update Company ───────────────────────────────────────────────────────────
+# --- Update Company ----
 
 @router.put("/companies/{company_id}",
             response_model=schemas.APIResponse[schemas.CompanyOut])
@@ -185,7 +185,7 @@ def update_company(
     )
 
 
-# ─── Expiring Companies ───────────────────────────────────────────────────────
+# --- Expiring Companies ----
 
 @router.get("/companies/expiring",
             response_model=schemas.APIResponse[list[schemas.CompanyStats]])
@@ -220,7 +220,7 @@ def expiring_companies(
 
 
 
-# ─── List Officers ────────────────────────────────────────────────────────────
+# --- List Officers ----
 # NOTE: POST /admin/officers has been removed. Safety officers are now created
 # by company_admins via POST /users (enforced by role-guard on that endpoint).
 
@@ -247,7 +247,7 @@ def list_officers(
     )
 
 
-# ─── Deactivate Officer ───────────────────────────────────────────────────────
+# --- Deactivate Officer ----
 
 @router.delete("/officers/{user_id}",
                response_model=schemas.APIResponse[None])
@@ -267,7 +267,7 @@ def deactivate_officer(
     return schemas.APIResponse(data=None, message="Officer deactivated")
 
 
-# ─── Notification Recipients ──────────────────────────────────────────────────
+# --- Notification Recipients ----
 
 @router.get("/notification-recipients",
             response_model=schemas.APIResponse[list[schemas.NotificationRecipientOut]])

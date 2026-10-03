@@ -23,7 +23,7 @@ class SSEManager:
         # company_id (str) → list of asyncio.Queue
         self._clients: Dict[str, List[asyncio.Queue]] = defaultdict(list)
 
-    # ── client lifecycle ──────────────────────────────────────────────────────
+    # -- client lifecycle ----
 
     def add_client(self, company_id: str) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
@@ -40,7 +40,7 @@ class SSEManager:
         logger.info("SSE client disconnected — company=%s  total=%d",
                     company_id, len(self._clients[company_id]))
 
-    # ── broadcasting ──────────────────────────────────────────────────────────
+    # -- broadcasting ----
 
     async def broadcast(self, company_id: str, event_type: str, data: Any) -> None:
         """Send an SSE event to every connected client for a given company."""

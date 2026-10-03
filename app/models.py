@@ -13,7 +13,7 @@ import enum
 from app.database import Base
 
 
-# ─── Enums ────────────────────────────────────────────────────────────────────
+# --- Enums ----
 
 class UserRole(str, enum.Enum):
     worker          = "worker"
@@ -43,7 +43,7 @@ class MessageType(str, enum.Enum):
     system = "system"
 
 
-# ─── Company ──────────────────────────────────────────────────────────────────
+# --- Company ----
 
 class Company(Base):
     __tablename__ = "companies"
@@ -69,7 +69,7 @@ class Company(Base):
         return f"<Company {self.name} ({self.company_code})>"
 
 
-# ─── User ─────────────────────────────────────────────────────────────────────
+# --- User ----
 
 class User(Base):
     __tablename__ = "users"
@@ -119,7 +119,7 @@ class User(Base):
         return f"<User {self.full_name} [{self.employee_id}]>"
 
 
-# ─── Medical Profile ──────────────────────────────────────────────────────────
+# --- Medical Profile ----
 
 class MedicalProfile(Base):
     __tablename__ = "medical_profiles"
@@ -145,7 +145,7 @@ class MedicalProfile(Base):
         return f"<MedicalProfile user_id={self.user_id}>"
 
 
-# ─── Emergency ────────────────────────────────────────────────────────────────
+# --- Emergency ----
 
 class Emergency(Base):
     __tablename__ = "emergencies"
@@ -166,16 +166,16 @@ class Emergency(Base):
     started_at           = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     resolved_at          = Column(DateTime(timezone=True), nullable=True)
     notes                = Column(Text, nullable=True)
-    # ── Resolution fields (added for officer resolution flow) ──────────────
+    # -- Resolution fields (added for officer resolution flow) ----
     responder_type       = Column(SAEnum(ResponderType), nullable=True)   # NEW
     eta_minutes          = Column(Integer, nullable=True)                  # NEW
 
-    # ── Worker-activity & ping tracking (added for nearby-workers feature) ─
+    # -- Worker-activity & ping tracking (added for nearby-workers feature) -
     last_seen_active     = Column(DateTime(timezone=True), nullable=True)  # NEW: updated on any worker action during emergency
     ping_sent_at         = Column(DateTime(timezone=True), nullable=True)  # NEW: when officer last sent "are you OK?" ping
     ping_acked_at        = Column(DateTime(timezone=True), nullable=True)  # NEW: when worker acknowledged the ping
 
-    # ── Conditional GPS heartbeat (last reported position during emergency) ─
+    # -- Conditional GPS heartbeat (last reported position during emergency) -
     # NOTE: latitude/longitude columns already exist (initial report position).
     # heartbeat_lat/lng track the *latest* live position while emergency is active.
     heartbeat_lat        = Column(Float, nullable=True)                    # NEW
@@ -189,7 +189,7 @@ class Emergency(Base):
         return f"<Emergency {self.type} [{self.status}]>"
 
 
-# ─── Notification Recipients (configurable from admin panel) ──────────────────
+# --- Notification Recipients (configurable from admin panel) ----
 
 class NotificationRecipient(Base):
     __tablename__ = "notification_recipients"
@@ -208,7 +208,7 @@ class NotificationRecipient(Base):
         return f"<NotificationRecipient {self.email}>"
 
 
-# ─── FCM Token ────────────────────────────────────────────────────────────────
+# --- FCM Token ----
 
 class FCMToken(Base):
     __tablename__ = "fcm_tokens"
@@ -223,7 +223,7 @@ class FCMToken(Base):
     user = relationship("User")
 
 
-# ─── Message ──────────────────────────────────────────────────────────────────
+# --- Message ----
 
 class Message(Base):
     __tablename__ = "messages"
@@ -242,7 +242,7 @@ class Message(Base):
     sender    = relationship("User")
 
 
-# ─── Department ───────────────────────────────────────────────────────────────────────
+# --- Department ----
 
 class Department(Base):
     __tablename__ = "departments"
@@ -260,7 +260,7 @@ class Department(Base):
         return f"<Department {self.name}>"
 
 
-# ─── Unit (child of Department) ──────────────────────────────────────────────────────────────
+# --- Unit (child of Department) ----
 
 class Unit(Base):
     __tablename__ = "units"
@@ -277,7 +277,7 @@ class Unit(Base):
         return f"<Unit {self.name}>"
 
 
-# ─── Audit Log ───────────────────────────────────────────────────────────────────────
+# --- Audit Log ----
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

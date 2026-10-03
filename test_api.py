@@ -12,13 +12,13 @@ import httpx
 BASE = os.getenv("TEST_BASE_URL", "http://127.0.0.1:8000")
 client = httpx.Client(base_url=BASE, timeout=30)
 
-# ── shared state ──────────────────────────────────────────────────────────────
+# -- shared state ----
 _state: dict = {}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Health
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_health():
     r = client.get("/health")
@@ -26,9 +26,9 @@ def test_health():
     assert r.json()["status"] == "ok"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Registration flow
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_register_invalid_company_code():
     r = client.post("/auth/register", json={
@@ -73,9 +73,9 @@ def test_register_duplicate_employee():
     assert r.status_code == 409
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Login flow
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_login_wrong_password():
     r = client.post("/auth/login", json={
@@ -122,9 +122,9 @@ def test_me_endpoint():
     assert body["data"]["company"] is not None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Emergency reporting
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_report_emergency():
     token = _state.get("worker_token")
@@ -194,9 +194,9 @@ def test_resolve_emergency():
     assert body["data"]["status"] == "resolved"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Medical profile
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_upsert_medical_profile():
     token = _state.get("worker_token")
@@ -222,9 +222,9 @@ def test_last_seen_update():
     assert "last_seen" in r.json()["data"]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Admin routes
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_admin_stats():
     token = _state.get("admin_token")
@@ -284,9 +284,9 @@ def test_admin_update_company():
     assert r.json()["data"]["max_users"] == 50
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # Access control guards
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_worker_cannot_access_admin():
     token = _state.get("worker_token")
@@ -299,9 +299,9 @@ def test_unauthenticated_request():
     assert r.status_code == 403   # HTTPBearer returns 403 when no credentials
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 # SSE endpoint (basic connectivity — not full stream test)
-# ══════════════════════════════════════════════════════════════════════════════
+# ----
 
 def test_sse_invalid_token():
     r = client.get("/events/stream?company_id=00000000-0000-0000-0000-000000000000&token=badtoken",

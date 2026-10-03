@@ -25,7 +25,7 @@ def check_license_expiry():
     - Companies that are already expired
     - Companies expiring within WARNING_DAYS days
     """
-    logger.info("⏰ Running license expiry check …")
+    logger.info(" Running license expiry check …")
     db = SessionLocal()
     try:
         today = date.today()
@@ -104,7 +104,7 @@ def check_license_expiry():
                 )
                 notified += 1
 
-        logger.info("⏰ License check complete — %d notification(s) sent", notified)
+        logger.info(" License check complete — %d notification(s) sent", notified)
 
     except Exception as exc:
         logger.exception("License expiry check failed: %s", exc)

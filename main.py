@@ -18,7 +18,7 @@ from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# -- Logging ----
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s — %(message)s",
@@ -26,31 +26,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sos_backend")
 
-# ── Import routes (after env is loaded) ──────────────────────────────────────
+# -- Import routes (after env is loaded) ----
 from app.routes import auth, users, emergencies, companies, events, medical, admin, messages, company_admin
 from app.database import engine
 from app import models
 from app.scheduler import create_scheduler
 
 
-# ── App lifespan ──────────────────────────────────────────────────────────────
+# -- App lifespan ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 EchoAlert backend starting up …")
+    logger.info(" EchoAlert backend starting up …")
     # Create all tables if they don't exist (dev convenience — use Alembic in prod)
     models.Base.metadata.create_all(bind=engine)
     # Start license-expiry scheduler
     scheduler = create_scheduler()
     scheduler.start()
-    logger.info("⏰ License expiry scheduler started (runs daily at 08:00)")
+    logger.info(" License expiry scheduler started (runs daily at 08:00)")
     yield
     scheduler.shutdown(wait=False)
-    logger.info("🛑 EchoAlert backend shutting down …")
+    logger.info(" EchoAlert backend shutting down …")
 
 from app.limiter import limiter
 
 
-# ── FastAPI instance ──────────────────────────────────────────────────────────
+# -- FastAPI instance ----
 app = FastAPI(
     title       = "EchoAlert API",
     description = "B2B emergency management platform for industrial companies in Algeria",
@@ -62,7 +62,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# -- CORS ----
 raw_origins = os.getenv("CORS_ORIGINS", '["*"]')
 try:
     origins = json.loads(raw_origins)
@@ -77,7 +77,7 @@ app.add_middleware(
     allow_headers     = ["*"],
 )
 
-# ── Request logging middleware ─────────────────────────────────────────────────
+# -- Request logging middleware ----
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
@@ -93,7 +93,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# ── Global error handler — never expose raw Python tracebacks ─────────────────
+# -- Global error handler — never expose raw Python tracebacks ----
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
@@ -107,7 +107,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── Routers ───────────────────────────────────────────────────────────────────
+# -- Routers ----
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(emergencies.router)
@@ -119,7 +119,7 @@ app.include_router(messages.router)
 app.include_router(company_admin.router)
 
 
-# ── Health check ──────────────────────────────────────────────────────────────
+# -- Health check ----
 @app.get("/", tags=["Health"])
 def root():
     return {"success": True, "message": "EchoAlert API is running", "version": "1.0.0"}

@@ -10,7 +10,7 @@ from app.models import EmergencyStatus, UserRole, ResponderType, MessageType
 T = TypeVar("T")
 
 
-# ─── Generic Response Wrapper ─────────────────────────────────────────────────
+# --- Generic Response Wrapper ----
 
 class APIResponse(BaseModel, Generic[T]):
     success: bool = True
@@ -18,7 +18,7 @@ class APIResponse(BaseModel, Generic[T]):
     message: str = "OK"
 
 
-# ─── Token ────────────────────────────────────────────────────────────────────
+# --- Token ----
 
 class Token(BaseModel):
     access_token: str
@@ -31,7 +31,7 @@ class TokenData(BaseModel):
     role: UserRole
 
 
-# ─── Company ──────────────────────────────────────────────────────────────────
+# --- Company ----
 
 class CompanyBase(BaseModel):
     name: str
@@ -94,7 +94,7 @@ class CompanyStats(CompanyOut):
     total_emergencies: int = 0
 
 
-# ─── Medical Profile ──────────────────────────────────────────────────────────
+# --- Medical Profile ----
 
 class MedicalProfileBase(BaseModel):
     blood_type: Optional[str] = None
@@ -119,7 +119,7 @@ class MedicalProfileOut(MedicalProfileBase):
     model_config = {"from_attributes": True}
 
 
-# ─── User ─────────────────────────────────────────────────────────────────────
+# --- User ----
 
 class UserBase(BaseModel):
     full_name: str
@@ -192,7 +192,7 @@ class UserLastSeen(BaseModel):
     last_seen: datetime
 
 
-# ─── Auth Responses ───────────────────────────────────────────────────────────
+# --- Auth Responses ----
 
 class LoginResponse(BaseModel):
     access_token: str
@@ -206,7 +206,7 @@ class RegisterResponse(BaseModel):
     user: UserOut
 
 
-# ─── Location ──────────────────────────────────────────────────────────────────────────
+# --- Location ----
 
 class LocationUpdate(BaseModel):
     """Body sent by the worker app every ~15 s to report live GPS position."""
@@ -224,7 +224,7 @@ class SSEWorkerLocationPayload(BaseModel):
     employee_id: str
 
 
-# ─── Emergency ────────────────────────────────────────────────────────────────
+# --- Emergency ----
 
 EMERGENCY_TYPES = [
     "Cardiac", "Respiratory", "Trauma", "Fire",
@@ -258,13 +258,13 @@ class EmergencyCreate(BaseModel):
 
 class EmergencyResolve(BaseModel):
     status: EmergencyStatus               # resolved | false_alarm | cancelled_by_worker
-    # ── NEW resolution fields ────────────────────────────────────────────────
+    # -- NEW resolution fields ----
     responder_type:   Optional[ResponderType] = None   # NEW
     eta_minutes:      Optional[int]           = None   # NEW
     resolution_notes: Optional[str]           = None   # NEW (maps to DB 'notes' column)
 
 
-# ── Heartbeat & Ping schemas ─────────────────────────────────────────────────
+# -- Heartbeat & Ping schemas ----
 
 class GpsHeartbeatIn(BaseModel):
     """Sent by the worker app every 30 s while an emergency is active."""
@@ -296,7 +296,7 @@ class NearbyWorkerOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Ping response window (seconds) ───────────────────────────────────────────
+# -- Ping response window (seconds) ----
 PING_RESPONSE_WINDOW_SECONDS = 60
 
 
@@ -314,11 +314,11 @@ class EmergencyOut(BaseModel):
     resolved_at: Optional[datetime]
     notes: Optional[str]
     voice_transcript: Optional[str] = None  # NEW
-    # ── Resolution fields ───────────────────────────────────────────────────
+    # -- Resolution fields ----
     responder_type: Optional[ResponderType] = None
     eta_minutes:    Optional[int]           = None
     
-    # ── Nearby-workers feature fields ───────────────────────────────────────
+    # -- Nearby-workers feature fields ----
     last_seen_active: Optional[datetime]    = None   # NEW
     ping_sent_at:     Optional[datetime]    = None   # NEW
     ping_acked_at:    Optional[datetime]    = None   # NEW
@@ -327,7 +327,7 @@ class EmergencyOut(BaseModel):
     # Computed: True when ping was sent, not acked, and window has expired
     not_responding:   bool                  = False  # NEW (derived)
     
-    # ── Dialer Fallback ─────────────────────────────────────────────────────
+    # -- Dialer Fallback ----
     primary_officer_phone: Optional[str] = None
 
     model_config = {"from_attributes": True}
@@ -363,7 +363,7 @@ class EmergencyPage(BaseModel):
     pages: int
 
 
-# ─── SSE Payloads ─────────────────────────────────────────────────────────────
+# --- SSE Payloads ----
 
 class SSEEmergencyStarted(BaseModel):
     emergency: EmergencyOut
@@ -381,7 +381,7 @@ class SSEEmergencyResolved(BaseModel):
     company:         Optional[CompanyOut]
 
 
-# ─── Admin Stats ──────────────────────────────────────────────────────────────
+# --- Admin Stats ----
 
 class AdminStats(BaseModel):
     total_companies: int
@@ -392,12 +392,12 @@ class AdminStats(BaseModel):
     expired: int = 0             # companies already expired
 
 
-# ─── Officer Creation ─────────────────────────────────────────────────────────
+# --- Officer Creation ----
 # OfficerCreate removed — POST /admin/officers has been deleted.
 # Safety officers are now created by company_admins via POST /users.
 
 
-# ─── Notification Recipients ──────────────────────────────────────────────────
+# --- Notification Recipients ----
 
 class NotificationRecipientCreate(BaseModel):
     email: str
@@ -414,14 +414,14 @@ class NotificationRecipientOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-# ─── FCM ──────────────────────────────────────────────────────────────────────
+# --- FCM ----
 
 class FCMTokenRegister(BaseModel):
     token: str
     device_info: Optional[str] = None
 
 
-# ─── Chat ─────────────────────────────────────────────────────────────────────
+# --- Chat ----
 
 class MessageCreateText(BaseModel):
     content: str
@@ -441,7 +441,7 @@ class MessageOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ─── Company Admin — new schemas ────────────────────────────────────────────────────────
+# --- Company Admin — new schemas ----
 
 class DepartmentCreate(BaseModel):
     name: str

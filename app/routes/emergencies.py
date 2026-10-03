@@ -14,7 +14,7 @@ from app.services.firebase_service import send_push_notification
 router = APIRouter(prefix="/emergencies", tags=["Emergencies"])
 
 
-# ─── Helper: build SSE payload ────────────────────────────────────────────────
+# --- Helper: build SSE payload ----
 
 def _emergency_payload(emergency: models.Emergency, db: Session) -> dict:
     user    = db.query(models.User).filter(models.User.id == emergency.user_id).first()
@@ -35,7 +35,7 @@ def _emergency_payload(emergency: models.Emergency, db: Session) -> dict:
     }
 
 
-# ─── Report Emergency ─────────────────────────────────────────────────────────
+# --- Report Emergency ----
 
 @router.post("", response_model=schemas.APIResponse[schemas.EmergencyOut],
              status_code=status.HTTP_201_CREATED)
@@ -60,7 +60,7 @@ async def report_emergency(
     db.commit()
     db.refresh(emergency)
 
-    # ── Duplicate proximity check ─────────────────────────────────────────────
+    # -- Duplicate proximity check ----
     # Look for other active emergencies in the same company started within the
     # last 2 minutes and within ~100 m of the new one.
     possible_duplicate_ids: list[str] = []
@@ -152,7 +152,7 @@ async def report_emergency(
     )
 
 
-# ─── Resolve Emergency ───────────────────────────────────────────────────────────────
+# --- Resolve Emergency ----
 
 @router.put("/{emergency_id}/resolve",
             response_model=schemas.APIResponse[schemas.EmergencyOut])
@@ -178,11 +178,11 @@ async def resolve_emergency(
     if emergency.status != models.EmergencyStatus.active:
         raise HTTPException(status_code=409, detail="Emergency is already resolved")
 
-    # ── Persist status + existing fields (UNCHANGED) ─────────────────────────
+    # -- Persist status + existing fields (UNCHANGED) ----
     emergency.status      = body.status
     emergency.resolved_at = datetime.now(timezone.utc)
 
-    # ── NEW: persist resolution detail fields ──────────────────────────────
+    # -- NEW: persist resolution detail fields ----
     if body.responder_type is not None:
         emergency.responder_type = body.responder_type       # NEW
     if body.eta_minutes is not None:
@@ -193,7 +193,7 @@ async def resolve_emergency(
     db.commit()
     db.refresh(emergency)
 
-    # ── Broadcast SSE with FULL enriched payload (CHANGED: was thin {id, status}) ──
+    # -- Broadcast SSE with FULL enriched payload (CHANGED: was thin {id, status}) --
     await sse_manager.broadcast(
         company_id = str(emergency.company_id),
         event_type = "EMERGENCY_RESOLVED",
@@ -206,7 +206,7 @@ async def resolve_emergency(
     )
 
 
-# ─── List Emergencies (paginated + filtered) ──────────────────────────────────
+# --- List Emergencies (paginated + filtered) ----
 
 @router.get("", response_model=schemas.APIResponse[schemas.EmergencyPage])
 def list_emergencies(
@@ -257,7 +257,7 @@ def list_emergencies(
     )
 
 
-# ─── Get Single Emergency Detail ──────────────────────────────────────────────
+# --- Get Single Emergency Detail ----
 
 @router.get("/{emergency_id}", response_model=schemas.APIResponse[schemas.EmergencyDetail])
 def get_emergency(
@@ -295,7 +295,7 @@ def get_emergency(
     return schemas.APIResponse(data=detail)
 
 
-# ─── Haversine helper ─────────────────────────────────────────────────────────
+# --- Haversine helper ----
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Returns great-circle distance in kilometres between two points."""
@@ -306,7 +306,7 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.asin(math.sqrt(a))
 
 
-# ─── GPS Heartbeat (worker → backend) ────────────────────────────────────────
+# --- GPS Heartbeat (worker → backend) ----
 
 @router.post("/{emergency_id}/heartbeat",
              response_model=schemas.APIResponse[schemas.EmergencyOut])
@@ -365,7 +365,7 @@ async def gps_heartbeat(
     )
 
 
-# ─── "Are You OK?" Ping (officer → worker via backend/SSE) ───────────────────
+# --- "Are You OK?" Ping (officer → worker via backend/SSE) ----
 
 @router.post("/{emergency_id}/ping",
              response_model=schemas.APIResponse[schemas.EmergencyOut])
@@ -418,7 +418,7 @@ async def send_ping(
     )
 
 
-# ─── Ping Acknowledgment (worker → backend) ───────────────────────────────────
+# --- Ping Acknowledgment (worker → backend) ----
 
 @router.post("/{emergency_id}/ping-ack",
              response_model=schemas.APIResponse[schemas.EmergencyOut])
@@ -474,7 +474,7 @@ async def ack_ping(
     )
 
 
-# ─── Nearby Workers (officer → dashboard) ────────────────────────────────────
+# --- Nearby Workers (officer → dashboard) ----
 
 @router.get("/{emergency_id}/nearby-workers",
             response_model=schemas.APIResponse[list[schemas.NearbyWorkerOut]])
