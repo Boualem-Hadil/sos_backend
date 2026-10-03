@@ -509,7 +509,8 @@ def get_nearby_workers(
     victim = None
     if emergency.user_id:
         victim = db.query(models.User).filter(models.User.id == emergency.user_id).first()
-    victim_unit = victim.unit if victim else None
+    victim_unit_id = victim.unit_id if victim else None
+    victim_dept_id = victim.department_id if victim else None
 
     # Get all other workers in the company
     other_workers = (
@@ -526,7 +527,11 @@ def get_nearby_workers(
     results: list[schemas.NearbyWorkerOut] = []
 
     for worker in other_workers:
-        is_unit_match = bool(victim_unit and worker.unit and worker.unit == victim_unit)
+        is_unit_match = False
+        if victim_unit_id and worker.unit_id == victim_unit_id:
+            is_unit_match = True
+        elif victim_dept_id and worker.department_id == victim_dept_id:
+            is_unit_match = True
         is_gps_match = False
         distance = None
 
