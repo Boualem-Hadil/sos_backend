@@ -163,6 +163,9 @@ def login(body: schemas.UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    if not company.is_active and user.role != models.UserRole.super_admin:
+        raise HTTPException(status_code=403, detail="Company account is deactivated")
+
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account deactivated")
 
