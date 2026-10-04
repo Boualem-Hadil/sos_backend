@@ -338,6 +338,37 @@ def deactivate_user(
     return schemas.APIResponse(data=None, message="User deactivated")
 
 
+# --- Reactivate user ----
+
+@router.patch("/{user_id}/reactivate", response_model=schemas.APIResponse[None])
+def reactivate_user(
+    user_id: str,
+    current_user: models.User = Depends(require_company_admin),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if current_user.role != models.UserRole.super_admin:
+        if str(user.company_id) != str(current_user.company_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    if user.is_active:
+        raise HTTPException(status_code=400, detail="User is already active")
+
+    company = user.company
+    if company and company.current_users >= company.max_users:
+        raise HTTPException(status_code=403, detail="User limit reached. Cannot reactivate.")
+        
+    user.is_active = True
+    if company:
+        company.current_users += 1
+        
+    db.commit()
+    return schemas.APIResponse(data=None, message="User reactivated")
+
+
 # --- Upsert medical profile (Admin/Officer) ----
 
 @router.put("/{user_id}/medical-profile", response_model=schemas.APIResponse[schemas.MedicalProfileOut])

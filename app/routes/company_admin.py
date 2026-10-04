@@ -258,14 +258,16 @@ def reset_officer_password(
 @router.get("/workers", response_model=schemas.APIResponse[list[schemas.UserOut]])
 def list_workers(
     department: Optional[str] = Query(None),
+    include_inactive: bool = Query(False),
     current_user: models.User = Depends(require_company_admin),
     db: Session = Depends(get_db),
 ):
     q = db.query(models.User).filter(
         models.User.company_id == current_user.company_id,
         models.User.role == models.UserRole.worker,
-        models.User.is_active == True,
     )
+    if not include_inactive:
+        q = q.filter(models.User.is_active == True)
     if department:
         q = q.filter(models.User.department == department)
     workers = q.order_by(models.User.full_name).all()
