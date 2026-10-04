@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import get_current_user, require_admin_or_officer, hash_password
+from app.auth import get_current_user, require_admin_or_officer, require_company_admin, hash_password
 from app.database import get_db
 from app.sse_manager import sse_manager
 
@@ -313,7 +313,7 @@ def update_user(
 @router.delete("/{user_id}", response_model=schemas.APIResponse[None])
 def deactivate_user(
     user_id: str,
-    current_user: models.User = Depends(require_admin_or_officer),
+    current_user: models.User = Depends(require_company_admin),
     db: Session = Depends(get_db),
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
