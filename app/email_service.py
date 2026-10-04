@@ -58,7 +58,7 @@ def send_email(to_addresses: List[str], subject: str, html_body: str) -> bool:
         msg["To"]      = ", ".join(recipients)
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
