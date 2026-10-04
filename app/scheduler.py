@@ -12,7 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.database import SessionLocal
 from app import models
-from app.email_service import send_license_expiry_warning
+from app.email_service import send_license_expiry_warning, SMTP_HOST, SMTP_USER
 
 logger = logging.getLogger("sos_backend.scheduler")
 
@@ -21,11 +21,15 @@ WARNING_DAYS = int(os.getenv("LICENSE_WARNING_DAYS", "30"))
 
 def check_license_expiry():
     """
-    Query all companies and send notifications for:
-    - Companies that are already expired
-    - Companies expiring within WARNING_DAYS days
+    Query all companies and:
+    - Auto-deactivate companies whose subscription_end has passed
+    - Send notifications for expired or soon-to-expire companies
     """
-    logger.info(" Running license expiry check …")
+    smtp_ok = bool(SMTP_HOST and SMTP_USER)
+    logger.info(
+        " Running license expiry check … (SMTP configured: %s, WARNING_DAYS: %d)",
+        smtp_ok, WARNING_DAYS,
+    )
     db = SessionLocal()
     try:
         today = date.today()
@@ -78,9 +82,20 @@ def check_license_expiry():
             extra = list(set(extra))
 
             if end < today:
-                # Already expired
+                # License has expired — auto-deactivate if still active
                 days_overdue = (today - end).days
-                logger.warning("Company %s license EXPIRED %d day(s) ago", company.company_code, days_overdue)
+                if company.is_active:
+                    company.is_active = False
+                    db.commit()
+                    logger.warning(
+                        "Company %s license EXPIRED %d day(s) ago — auto-deactivated",
+                        company.company_code, days_overdue,
+                    )
+                else:
+                    logger.warning(
+                        "Company %s license EXPIRED %d day(s) ago (already deactivated)",
+                        company.company_code, days_overdue,
+                    )
                 send_license_expiry_warning(
                     company_name=company.name,
                     company_code=company.company_code,

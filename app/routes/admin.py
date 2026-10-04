@@ -337,3 +337,42 @@ def remove_notification_recipient(
     recipient.is_active = False
     db.commit()
     return schemas.APIResponse(data=None, message="Recipient removed")
+
+
+# --- Manual Scheduler Trigger (debug) ----
+
+@router.post("/scheduler/trigger", response_model=schemas.APIResponse[dict])
+def trigger_license_check(
+    _: models.User = Depends(require_super_admin),
+):
+    """
+    Manually fire the license expiry check job immediately.
+    Use this to test SMTP configuration and auto-deactivation logic
+    without waiting for the daily 08:00 cron run.
+    """
+    import logging as _logging
+    from app.scheduler import check_license_expiry
+    from app.email_service import SMTP_HOST, SMTP_USER, ADMIN_EMAILS
+
+    job_logger = _logging.getLogger("sos_backend.scheduler")
+    job_logger.info("Manual trigger of license expiry check via /admin/scheduler/trigger")
+
+    smtp_configured = bool(SMTP_HOST and SMTP_USER)
+
+    try:
+        check_license_expiry()
+        return schemas.APIResponse(
+            data={
+                "triggered": True,
+                "smtp_configured": smtp_configured,
+                "smtp_host": SMTP_HOST or "(not set)",
+                "smtp_user": SMTP_USER or "(not set)",
+                "admin_emails": ADMIN_EMAILS,
+            },
+            message="License expiry check completed — see server logs for details",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scheduler job failed: {exc}",
+        )
