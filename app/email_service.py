@@ -50,13 +50,20 @@ def send_email(to_addresses: List[str], subject: str, html_body: str) -> bool:
     Send an HTML email via Resend HTTP API (works on Railway — uses HTTPS port 443).
     Falls back to stub logging if RESEND_API_KEY is not set.
     """
-    # Strip any malformed addresses (e.g. JSON bracket artifacts)
+    # Strip any malformed addresses and split by comma in case 
+    # multiple emails were crammed into a single string
+    raw_recipients = []
+    for a in to_addresses:
+        if not a:
+            continue
+        for part in a.split(","):
+            raw_recipients.append(part)
+
     recipients = [
-        a.strip().strip('"').strip("'").strip("[").strip("]")
-        for a in to_addresses
-        if a and "@" in a
+        r.strip().strip('"').strip("'").strip("[").strip("]")
+        for r in raw_recipients
     ]
-    recipients = [r for r in recipients if r and "@" in r]
+    recipients = list(set([r for r in recipients if r and "@" in r]))
 
     if not recipients:
         logger.warning("send_email called with no valid recipients — skipping")
