@@ -1,74 +1,98 @@
 """
-email_service.py — Send transactional emails for EchoAlert.
+email_service.py — Send transactional emails for EchoAlert via Resend HTTP API.
 
-Configure via .env:
-  SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, ADMIN_EMAIL
+Configure via Railway Variables (or .env):
+  RESEND_API_KEY   — from https://resend.com (free: 3000 emails/month)
+  FROM_EMAIL       — verified sender address, e.g. noreply@yourdomain.com
+  ADMIN_EMAIL      — comma-separated list: alice@x.com,bob@x.com
+                     (also accepts JSON array format: ["alice@x.com","bob@x.com"])
 
-  ADMIN_EMAIL accepts a single address or a comma-separated list:
-    ADMIN_EMAIL=alice@example.com
-    ADMIN_EMAIL=alice@example.com,bob@example.com
+Note: raw smtplib is blocked on Railway (Errno 101). Resend uses HTTPS (port 443)
+which is always open.
 """
+import json
 import logging
 import os
-import smtplib
 from datetime import date
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import List, Optional
+
+import httpx
 
 logger = logging.getLogger("sos_backend.email")
 
-SMTP_HOST     = os.getenv("SMTP_HOST", "")
-SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER     = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+FROM_EMAIL     = os.getenv("FROM_EMAIL", "EchoAlert <noreply@echoalert.dz>")
 
-# Comma-separated list of super-admin addresses that receive every
-# platform-level notification (license expiry, etc.).
-# Single address still works — backward-compatible.
-_raw_admin_emails = os.getenv("ADMIN_EMAIL", "")
-ADMIN_EMAILS: List[str] = [e.strip() for e in _raw_admin_emails.split(",") if e.strip()]
+# Parse ADMIN_EMAIL — handles both:
+#   plain CSV:  alice@x.com,bob@x.com
+#   JSON array: ["alice@x.com","bob@x.com"]
+_raw_admin_emails = os.getenv("ADMIN_EMAIL", "").strip()
+try:
+    if _raw_admin_emails.startswith("["):
+        _parsed = json.loads(_raw_admin_emails)
+        ADMIN_EMAILS: List[str] = [e.strip() for e in _parsed if isinstance(e, str) and e.strip()]
+    else:
+        ADMIN_EMAILS = [e.strip() for e in _raw_admin_emails.split(",") if e.strip()]
+except Exception:
+    ADMIN_EMAILS = [e.strip() for e in _raw_admin_emails.split(",") if e.strip()]
+
+# Keep legacy SMTP_HOST / SMTP_USER exported so scheduler.py import doesn't break
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_USER = os.getenv("SMTP_USER", "")
 
 
-def _smtp_configured() -> bool:
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+def _resend_configured() -> bool:
+    return bool(RESEND_API_KEY)
 
 
 def send_email(to_addresses: List[str], subject: str, html_body: str) -> bool:
     """
-    Send an HTML email to one or more recipients.
-    Returns True on success, False on failure (logs the error).
-    Falls back to logging if SMTP is not configured.
+    Send an HTML email via Resend HTTP API (works on Railway — uses HTTPS port 443).
+    Falls back to stub logging if RESEND_API_KEY is not set.
     """
-    if not _smtp_configured():
+    # Strip any malformed addresses (e.g. JSON bracket artifacts)
+    recipients = [
+        a.strip().strip('"').strip("'").strip("[").strip("]")
+        for a in to_addresses
+        if a and "@" in a
+    ]
+    recipients = [r for r in recipients if r and "@" in r]
+
+    if not recipients:
+        logger.warning("send_email called with no valid recipients — skipping")
+        return False
+
+    if not _resend_configured():
         logger.warning(
-            "[EMAIL STUB] To: %s | Subject: %s\n--- BODY (first 300 chars) ---\n%s",
-            ", ".join(to_addresses), subject, html_body[:300],
+            "[EMAIL STUB — set RESEND_API_KEY in Railway] To: %s | Subject: %s",
+            recipients, subject,
         )
         return False
 
-    recipients = [a for a in to_addresses if a]  # filter empty strings
-    if not recipients:
-        return False
-
+    logger.info("Sending email via Resend → recipients=%s subject=%s", recipients, subject)
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"EchoAlert Platform <{SMTP_USER}>"
-        msg["To"]      = ", ".join(recipients)
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, recipients, msg.as_string())
-
-        logger.info("Email sent to %s: %s", recipients, subject)
-        return True
-
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": FROM_EMAIL,
+                "to": recipients,
+                "subject": subject,
+                "html": html_body,
+            },
+            timeout=20,
+        )
+        if resp.status_code in (200, 201):
+            logger.info("✅ Email sent to %s: %s", recipients, subject)
+            return True
+        else:
+            logger.error("❌ Resend API error %d: %s", resp.status_code, resp.text)
+            return False
     except Exception as exc:
-        logger.error("Failed to send email to %s: %s", recipients, exc)
+        logger.error("❌ Failed to send email to %s: %s — %s", recipients, type(exc).__name__, exc)
         return False
 
 
