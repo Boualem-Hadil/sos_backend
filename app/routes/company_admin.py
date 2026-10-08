@@ -19,7 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import hash_password, require_company_admin
+from app.auth import hash_password, require_company_admin, require_admin_or_officer
 from app.database import get_db
 
 router = APIRouter(prefix="/company-admin", tags=["Company Admin"])
@@ -278,7 +278,7 @@ def list_workers(
 
 @router.get("/departments", response_model=schemas.APIResponse[list[schemas.DepartmentOut]])
 def list_departments(
-    current_user: models.User = Depends(require_company_admin),
+    current_user: models.User = Depends(require_admin_or_officer),
     db: Session = Depends(get_db),
 ):
     depts = (
