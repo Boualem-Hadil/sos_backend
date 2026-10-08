@@ -200,6 +200,17 @@ async def resolve_emergency(
         data       = _emergency_payload(emergency, db),    # CHANGED
     )
 
+    # -- FCM Push Notification to the worker --
+    tokens = db.query(models.FCMToken.token).filter(models.FCMToken.user_id == emergency.user_id).all()
+    token_list = [t[0] for t in tokens]
+    if token_list:
+        send_push_notification(
+            tokens=token_list,
+            title="Urgence résolue",
+            body="Votre urgence a été marquée comme résolue.",
+            data={"event_type": "EMERGENCY_RESOLVED", "emergency_id": str(emergency.id)}
+        )
+
     return schemas.APIResponse(
         data    = schemas.EmergencyOut.model_validate(emergency),
         message = "Emergency resolved",
@@ -411,6 +422,17 @@ async def send_ping(
             "window_seconds": schemas.PING_RESPONSE_WINDOW_SECONDS,
         },
     )
+
+    # -- FCM Push Notification to the worker --
+    tokens = db.query(models.FCMToken.token).filter(models.FCMToken.user_id == emergency.user_id).all()
+    token_list = [t[0] for t in tokens]
+    if token_list:
+        send_push_notification(
+            tokens=token_list,
+            title="Êtes-vous en sécurité ?",
+            body="L'agent de sécurité a demandé une vérification de votre statut. Veuillez confirmer.",
+            data={"event_type": "PING_SENT", "emergency_id": str(emergency.id)}
+        )
 
     return schemas.APIResponse(
         data    = schemas.EmergencyOut.model_validate(emergency),
