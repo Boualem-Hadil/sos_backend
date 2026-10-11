@@ -24,7 +24,13 @@ def list_users(
         .order_by(models.User.full_name)
         .all()
     )
-    return schemas.APIResponse(data=[schemas.UserOut.model_validate(u) for u in users])
+    result = []
+    for u in users:
+        d = schemas.UserOut.model_validate(u).model_dump()
+        d["department_name"] = u.department_rel.name if u.department_rel else None
+        d["unit_name"] = u.unit_rel.name if u.unit_rel else None
+        result.append(d)
+    return schemas.APIResponse(data=result)
 
 
 # --- Add new worker ----
@@ -88,10 +94,10 @@ def create_user(
     db.commit()
     db.refresh(user)
 
-    return schemas.APIResponse(
-        data=schemas.UserOut.model_validate(user),
-        message="User created"
-    )
+    u_dict = schemas.UserOut.model_validate(user).model_dump()
+    u_dict["department_name"] = user.department_rel.name if user.department_rel else None
+    u_dict["unit_name"] = user.unit_rel.name if user.unit_rel else None
+    return schemas.APIResponse(data=u_dict, message="User created")
 
 
 # --- Upsert medical profile (Self) ----
@@ -304,7 +310,10 @@ def update_user(
 
     db.commit()
     db.refresh(user)
-    return schemas.APIResponse(data=schemas.UserOut.model_validate(user), message="User updated")
+    u_dict = schemas.UserOut.model_validate(user).model_dump()
+    u_dict["department_name"] = user.department_rel.name if user.department_rel else None
+    u_dict["unit_name"] = user.unit_rel.name if user.unit_rel else None
+    return schemas.APIResponse(data=u_dict, message="User updated")
 
 
 # --- Deactivate user ----

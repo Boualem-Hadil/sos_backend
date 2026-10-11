@@ -501,8 +501,17 @@ def emergency_history(
         .all()
     )
 
+    result = []
+    for e in items:
+        d = schemas.EmergencyOut.model_validate(e).model_dump()
+        if e.user:
+            d["department_name"] = e.user.department_rel.name if e.user.department_rel else None
+        else:
+            d["department_name"] = None
+        result.append(d)
+
     return schemas.APIResponse(
-        data=[schemas.EmergencyOut.model_validate(e) for e in items],
+        data=result,
         message=f"{total} total records",
     )
 
