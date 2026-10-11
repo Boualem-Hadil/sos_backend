@@ -77,7 +77,6 @@ def create_user(
         phone=body.phone,
         unit_id=body.unit_id,
         department_id=body.department_id,
-        position=body.position,
         password_hash=hash_password(body.password),
         role=body.role,
     )

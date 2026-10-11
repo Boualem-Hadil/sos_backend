@@ -127,12 +127,10 @@ class UserBase(BaseModel):
     phone: Optional[str] = None
     department_id: Optional[UUID] = None
     unit_id: Optional[UUID] = None
-    position: Optional[str] = None
 
 class WorkerCreate(UserBase):
     password: str = Field(min_length=6)
     role: UserRole = UserRole.worker
-    assigned_officer_id: Optional[UUID] = None
 
 class WorkerUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -140,9 +138,7 @@ class WorkerUpdate(BaseModel):
     phone: Optional[str] = None
     department_id: Optional[UUID] = None
     unit_id: Optional[UUID] = None
-    position: Optional[str] = None
     role: Optional[UserRole] = None
-    assigned_officer_id: Optional[UUID] = None
 
 
 class UserRegister(UserBase):
@@ -171,7 +167,6 @@ class UserOut(UserBase):
     company_id: UUID
     role: UserRole
     is_active: bool
-    assigned_officer_id: Optional[UUID] = None
     last_seen: Optional[datetime]
     created_at: datetime
     medical_profile: Optional[MedicalProfileOut] = None

@@ -82,7 +82,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role          = Column(SAEnum(UserRole), nullable=False, default=UserRole.worker)
     is_active     = Column(Boolean, nullable=False, default=True)
-    assigned_officer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     last_seen     = Column(DateTime(timezone=True), nullable=True)
     # Live location — updated by worker app every ~15 s while foregrounded
@@ -92,7 +91,6 @@ class User(Base):
     # Extra profile fields
     department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     unit_id       = Column(UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True)
-    position      = Column(String(100), nullable=True)
 
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     latitude      = Column(Float, nullable=True)

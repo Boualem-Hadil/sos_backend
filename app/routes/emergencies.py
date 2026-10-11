@@ -97,17 +97,10 @@ async def report_emergency(
     ).order_by(models.User.created_at.asc()).all()
 
     # 3. Determine the primary target officer for the Native Dialer
-    # Priority: Assigned officer with phone -> Any active officer with phone
-    if current_user.assigned_officer_id:
-        assigned = next((o for o in officers if str(o.id) == str(current_user.assigned_officer_id)), None)
-        if assigned and assigned.phone:
-            primary_officer_phone = assigned.phone
-
-    if not primary_officer_phone:
-        # Fallback: First active officer with a phone number
-        fallback_officer = next((o for o in officers if o.phone), None)
-        if fallback_officer:
-            primary_officer_phone = fallback_officer.phone
+    # Priority: First active officer with phone number
+    fallback_officer = next((o for o in officers if o.phone), None)
+    if fallback_officer:
+        primary_officer_phone = fallback_officer.phone
 
     # 4. Trigger Push Notifications to all active officers in the company
     officer_ids = [o.id for o in officers]
