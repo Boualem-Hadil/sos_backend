@@ -233,7 +233,7 @@ def list_emergencies(
             query = query.filter(models.Emergency.user_id == user_id)
 
     if type:
-        query = query.filter(models.Emergency.type == type)
+        query = query.filter(models.Emergency.type.ilike(type))
     if status:
         try:
             st = models.EmergencyStatus(status)

@@ -178,6 +178,15 @@ class UserOut(UserBase):
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def model_validate(cls, obj, *args, **kwargs):
+        instance = super().model_validate(obj, *args, **kwargs)
+        if hasattr(obj, "department_rel") and obj.department_rel:
+            instance.department_name = obj.department_rel.name
+        if hasattr(obj, "unit_rel") and obj.unit_rel:
+            instance.unit_name = obj.unit_rel.name
+        return instance
+
 
 class UserWithCompany(UserOut):
     company: Optional[CompanyOut] = None
@@ -325,11 +334,34 @@ class EmergencyOut(BaseModel):
     # -- Dialer Fallback ----
     primary_officer_phone: Optional[str] = None
 
+    # -- Department & Unit fields ----
+    department_name: Optional[str] = None
+    unit_name:       Optional[str] = None
+
+    # -- Computed duration (minutes) from started_at → resolved_at ----
+    duration_minutes: Optional[int] = None
+
     model_config = {"from_attributes": True}
 
     @classmethod
     def model_validate(cls, obj, *args, **kwargs):
         instance = super().model_validate(obj, *args, **kwargs)
+        # Populate department_name and unit_name from associated user if not already set
+        if hasattr(obj, "user") and obj.user:
+            if instance.department_name is None and hasattr(obj.user, "department_rel") and obj.user.department_rel:
+                instance.department_name = obj.user.department_rel.name
+            if instance.unit_name is None and hasattr(obj.user, "unit_rel") and obj.user.unit_rel:
+                instance.unit_name = obj.user.unit_rel.name
+        # Compute duration_minutes from timestamps when available
+        if instance.duration_minutes is None and instance.started_at and instance.resolved_at:
+            s = instance.started_at
+            r = instance.resolved_at
+            if s.tzinfo is None:
+                s = s.replace(tzinfo=timezone.utc)
+            if r.tzinfo is None:
+                r = r.replace(tzinfo=timezone.utc)
+            diff_sec = (r - s).total_seconds()
+            instance.duration_minutes = max(0, round(diff_sec / 60))
         # Derive not_responding: ping sent + no ack + window expired
         if (
             instance.ping_sent_at is not None

@@ -11,6 +11,7 @@ officer_reactivated, password_reset.
 import json
 import secrets
 import string
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -269,9 +270,19 @@ def list_workers(
     if not include_inactive:
         q = q.filter(models.User.is_active == True)
     if department:
-        q = q.filter(models.User.department == department)
+        try:
+            dept_uuid = uuid.UUID(department)
+            q = q.filter(models.User.department_id == dept_uuid)
+        except ValueError:
+            q = q.join(models.User.department_rel).filter(models.Department.name == department)
     workers = q.order_by(models.User.full_name).all()
-    return schemas.APIResponse(data=[schemas.UserOut.model_validate(w) for w in workers])
+    result = []
+    for w in workers:
+        d = schemas.UserOut.model_validate(w).model_dump()
+        d["department_name"] = w.department_rel.name if w.department_rel else None
+        d["unit_name"] = w.unit_rel.name if w.unit_rel else None
+        result.append(d)
+    return schemas.APIResponse(data=result)
 
 
 # --- Departments ----
@@ -476,7 +487,7 @@ def emergency_history(
         models.Emergency.company_id == current_user.company_id,
     )
     if type:
-        q = q.filter(models.Emergency.type == type)
+        q = q.filter(models.Emergency.type.ilike(type))
     if status_filter:
         try:
             q = q.filter(models.Emergency.status == models.EmergencyStatus(status_filter))
@@ -506,8 +517,10 @@ def emergency_history(
         d = schemas.EmergencyOut.model_validate(e).model_dump()
         if e.user:
             d["department_name"] = e.user.department_rel.name if e.user.department_rel else None
+            d["unit_name"] = e.user.unit_rel.name if e.user.unit_rel else None
         else:
             d["department_name"] = None
+            d["unit_name"] = None
         result.append(d)
 
     return schemas.APIResponse(
