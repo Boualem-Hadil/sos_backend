@@ -1,6 +1,9 @@
 import json
 import logging
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -92,26 +95,79 @@ def send_push_notification(
     title: str,
     body: str,
     data: Optional[dict] = None,
-) -> None:
-    """Send an FCM push notification to one or more device tokens."""
+) -> List[str]:
+    """
+    Send an FCM push notification to one or more device tokens.
+
+    Returns a list of invalid/expired token strings so callers can clean them up
+    from the database to avoid wasting future send attempts.
+    """
     init_firebase()
-    if not _firebase_initialized or not tokens:
-        return
+
+    if not _firebase_initialized:
+        logger.warning("FCM not initialized — skipping push notification (title=%r, tokens=%d)", title, len(tokens))
+        return []
+
+    if not tokens:
+        logger.warning("FCM send_push_notification called with empty token list — skipping")
+        return []
+
+    # FCM data payload values must ALL be strings (Firebase requirement)
+    str_data = {k: str(v) for k, v in (data or {}).items()}
+
+    logger.info("FCM sending to %d token(s) — title=%r", len(tokens), title)
 
     message = messaging.MulticastMessage(
         notification=messaging.Notification(title=title, body=body),
-        data=data or {},
+        data=str_data,
         tokens=tokens,
+        # Android: high priority ensures delivery even in Doze mode
+        android=messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                sound="default",
+                priority="high",
+                channel_id="emergency_alerts",
+            ),
+        ),
+        # iOS: sound + badge update via APNS
+        apns=messaging.APNSConfig(
+            headers={"apns-priority": "10"},
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(sound="default", badge=1, content_available=True)
+            ),
+        ),
     )
 
+    invalid_tokens: List[str] = []
     try:
         response = messaging.send_each_for_multicast(message)
         logger.info(
-            "FCM multicast: %d success, %d failed (of %d tokens)",
+            "FCM multicast result: %d success, %d failed (of %d tokens)",
             response.success_count,
             response.failure_count,
             len(tokens),
         )
-    except Exception as exc:
-        logger.error("FCM send error: %s", exc)
 
+        # Log each individual failure so we can debug which token/device is broken
+        for idx, result in enumerate(response.responses):
+            if not result.success:
+                token = tokens[idx]
+                err_code = result.exception.code if result.exception else "unknown"
+                err_msg = str(result.exception) if result.exception else "no details"
+                logger.warning(
+                    "FCM token[%d] FAILED — code=%s msg=%s token=%s…",
+                    idx, err_code, err_msg, token[:25]
+                )
+                # Collect stale/unregistered tokens for the caller to delete from DB
+                if err_code in (
+                    "registration-token-not-registered",
+                    "invalid-registration-token",
+                    "messaging/registration-token-not-registered",
+                ):
+                    invalid_tokens.append(token)
+
+    except Exception as exc:
+        logger.error("FCM send_each_for_multicast raised exception: %s", exc, exc_info=True)
+
+    return invalid_tokens

@@ -1,5 +1,9 @@
+import asyncio
+import logging
 import math
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+
+logger = logging.getLogger("sos_backend.emergencies"), timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
@@ -104,16 +108,25 @@ async def report_emergency(
 
     # 4. Trigger Push Notifications to all active officers in the company
     officer_ids = [o.id for o in officers]
+    logger.info("[FCM] Found %d active officer(s) in company %s", len(officer_ids), current_user.company_id)
     if officer_ids:
         tokens = db.query(models.FCMToken.token).filter(models.FCMToken.user_id.in_(officer_ids)).all()
         token_list = [t[0] for t in tokens]
         if token_list:
-            send_push_notification(
+            logger.info("[FCM] Sending push notification to %d officer token(s)", len(token_list))
+            invalid_tokens = await asyncio.to_thread(
+                send_push_notification,
                 tokens=token_list,
                 title="🚨 Emergency Triggered!",
                 body=f"An emergency ({body.type}) was reported by {current_user.full_name}.",
-                data={"emergency_id": str(emergency.id)}
+                data={"emergency_id": str(emergency.id), "event_type": "EMERGENCY_STARTED"}
             )
+            if invalid_tokens:
+                db.query(models.FCMToken).filter(models.FCMToken.token.in_(invalid_tokens)).delete(synchronize_session=False)
+                db.commit()
+                logger.info("[FCM] Cleaned up %d stale token(s) from database", len(invalid_tokens))
+        else:
+            logger.warning("[FCM] No registered device tokens found for officers in company %s. Officer phone will not receive push.", current_user.company_id)
 
     # 5. Auto-generate System Message
     sys_msg = models.Message(

@@ -167,6 +167,7 @@ class UserOut(UserBase):
     company_id: UUID
     role: UserRole
     is_active: bool
+    must_change_password: bool = False
     last_seen: Optional[datetime]
     created_at: datetime
     medical_profile: Optional[MedicalProfileOut] = None

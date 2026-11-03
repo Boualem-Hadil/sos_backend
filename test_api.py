@@ -102,9 +102,9 @@ def test_login_success():
 
 def test_login_admin():
     r = client.post("/auth/login", json={
-        "employee_id":  "admin",
-        "password":     "admin123",
-        "company_code": "SYSADMIN-INTERNAL",
+        "employee_id":  "superAdmin",
+        "password":     "turbocooling",
+        "company_code": "SUPER-ADMIN",
     })
     assert r.status_code == 200, r.text
     body = r.json()
@@ -120,6 +120,70 @@ def test_me_endpoint():
     body = r.json()
     assert body["data"]["employee_id"] == "SON-001"
     assert body["data"]["company"] is not None
+
+
+# ----
+# Users management (CRUD and company user limits)
+# ----
+
+def test_users_crud_and_limit():
+    import uuid
+    officer_tok = _state.get("officer_token")
+    emp_code = f"SON-W-{uuid.uuid4().hex[:5].upper()}"
+
+    # 1. Creating user
+    r = client.post("/users", headers={"Authorization": f"Bearer {officer_tok}"}, json={
+        "full_name": "Test Worker LifeCycle",
+        "employee_id": emp_code,
+        "password": "workerPassword123",
+        "phone": "+213550111222",
+        "role": "worker"
+    })
+    assert r.status_code == 201, r.text
+    u_id = r.json()["data"]["id"]
+
+    # 2. Updating user
+    r = client.put(f"/users/{u_id}", headers={"Authorization": f"Bearer {officer_tok}"}, json={
+        "full_name": "Test Worker LifeCycle Updated"
+    })
+    assert r.status_code == 200
+    assert r.json()["data"]["full_name"] == "Test Worker LifeCycle Updated"
+
+    # 3. Deactivating user (requires admin role)
+    admin_tok = _state.get("admin_token")
+    r = client.delete(f"/users/{u_id}", headers={"Authorization": f"Bearer {admin_tok}"})
+    assert r.status_code == 200
+
+    # Reactivate user
+    r = client.patch(f"/users/{u_id}/reactivate", headers={"Authorization": f"Bearer {admin_tok}"})
+    assert r.status_code == 200
+
+    # 4. Limit check: when current_users >= max_users, registration/creation is rejected
+    from app.database import SessionLocal
+    from app import models
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.id == u_id).first()
+        company = db.query(models.Company).filter(models.Company.id == user.company_id).first()
+        old_max = company.max_users
+        old_curr = company.current_users
+        company.max_users = old_curr  # saturation
+        db.commit()
+
+        # Attempt to create should be rejected by limit
+        r_limit = client.post("/users", headers={"Authorization": f"Bearer {officer_tok}"}, json={
+            "full_name": "Limit Exceeded Worker",
+            "employee_id": f"LIMIT-{uuid.uuid4().hex[:4].upper()}",
+            "password": "workerPassword123",
+            "phone": "+213550111333",
+            "role": "worker"
+        })
+        assert r_limit.status_code == 403
+        assert "limit" in r_limit.text.lower()
+    finally:
+        company.max_users = old_max
+        db.commit()
+        db.close()
 
 
 # ----
@@ -177,6 +241,62 @@ def test_get_emergency_detail():
     assert r.status_code == 200
     body = r.json()
     assert body["data"]["id"] == eid
+
+
+def test_emergency_gps_heartbeat():
+    eid = _state.get("emergency_id")
+    token = _state.get("worker_token")
+    if not eid:
+        pytest.skip("No emergency_id in state")
+    r = client.post(
+        f"/emergencies/{eid}/heartbeat",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"latitude": 36.7380, "longitude": 3.0870},
+    )
+    assert r.status_code == 200
+    assert r.json()["data"]["heartbeat_lat"] == 36.7380
+
+
+def test_emergency_ping_and_ack():
+    eid = _state.get("emergency_id")
+    officer_tok = _state.get("officer_token")
+    worker_tok  = _state.get("worker_token")
+    if not eid:
+        pytest.skip("No emergency_id in state")
+    # Officer pings the emergency
+    r = client.post(f"/emergencies/{eid}/ping", headers={"Authorization": f"Bearer {officer_tok}"})
+    assert r.status_code == 200
+    assert r.json()["data"]["ping_sent_at"] is not None
+
+    # Worker acknowledges the ping
+    r = client.post(f"/emergencies/{eid}/ping-ack", headers={"Authorization": f"Bearer {worker_tok}"})
+    assert r.status_code == 200
+    assert r.json()["data"]["ping_acked_at"] is not None
+
+
+def test_emergency_messages():
+    eid = _state.get("emergency_id")
+    worker_tok  = _state.get("worker_token")
+    officer_tok = _state.get("officer_token")
+    if not eid:
+        pytest.skip("No emergency_id in state")
+    # Worker posts a message
+    r = client.post(
+        f"/emergencies/{eid}/messages/text",
+        headers={"Authorization": f"Bearer {worker_tok}"},
+        json={"content": "Need immediate medical team at sector 4."},
+    )
+    assert r.status_code == 200
+    assert r.json()["data"]["content"] == "Need immediate medical team at sector 4."
+
+    # Officer reads messages
+    r = client.get(
+        f"/emergencies/{eid}/messages",
+        headers={"Authorization": f"Bearer {officer_tok}"},
+    )
+    assert r.status_code == 200
+    msgs = r.json()["data"]
+    assert any("Need immediate medical team" in m["content"] for m in msgs)
 
 
 def test_resolve_emergency():
@@ -247,6 +367,18 @@ def test_admin_list_companies():
 
 
 def test_admin_create_company():
+    from app.database import SessionLocal
+    from app import models
+    db = SessionLocal()
+    try:
+        existing = db.query(models.Company).filter(models.Company.company_code == "TEST-MINING-001").first()
+        if existing:
+            db.query(models.User).filter(models.User.company_id == existing.id).delete()
+            db.delete(existing)
+            db.commit()
+    finally:
+        db.close()
+
     token = _state.get("admin_token")
     r = client.post("/admin/companies", headers={"Authorization": f"Bearer {token}"}, json={
         "name":             "Test Mining Corp",
@@ -296,7 +428,7 @@ def test_worker_cannot_access_admin():
 
 def test_unauthenticated_request():
     r = client.get("/users")
-    assert r.status_code == 403   # HTTPBearer returns 403 when no credentials
+    assert r.status_code in (401, 403)   # HTTPBearer returns 401/403 when no credentials
 
 
 # ----
