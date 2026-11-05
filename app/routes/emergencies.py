@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
-logger = logging.getLogger("sos_backend.emergencies"), timezone, timedelta
+logger = logging.getLogger("sos_backend.emergencies")
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
@@ -128,15 +128,7 @@ async def report_emergency(
         else:
             logger.warning("[FCM] No registered device tokens found for officers in company %s. Officer phone will not receive push.", current_user.company_id)
 
-    # 5. Auto-generate System Message
-    sys_msg = models.Message(
-        emergency_id=emergency.id,
-        sender_id=None,
-        message_type=models.MessageType.system,
-        content=f"Emergency triggered at location: {body.location_description or 'Unknown location'} (Lat: {body.latitude}, Lng: {body.longitude})"
-    )
-    db.add(sys_msg)
-    db.commit()
+    # Location is sent directly in the emergency object/SSE payload (not as chat message)
 
     # Broadcast SSE
     sse_payload = _emergency_payload(emergency, db)
